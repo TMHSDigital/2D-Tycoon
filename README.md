@@ -24,15 +24,29 @@ A text-based business simulation game where you manage resources, build reputati
    pip install -r requirements.txt
    ```
 3. Run the game:
+
+   For Command Line Interface:
    ```
    python main.py
    ```
 
+   For Graphical User Interface:
+   ```
+   python main.py --gui
+   ```
+
 ## Game Controls
+
+### Command Line Interface
 - Use number keys to select actions from menus
 - Follow on-screen prompts
 - Type 'help' at any time to view game tips
 - Press 'M' to view business map
+
+### Graphical User Interface
+- Click buttons to perform actions
+- Use dialog windows for detailed interactions
+- All game features accessible through intuitive GUI elements
 
 ## Game Mechanics
 

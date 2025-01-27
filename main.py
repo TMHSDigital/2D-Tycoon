@@ -5,6 +5,8 @@ from time import sleep
 from typing import Dict, Any
 from colorama import init, Fore, Style
 from pyfiglet import figlet_format
+import sys
+from gui_interface import TycoonGUI
 
 # Initialize colorama
 init()
@@ -354,6 +356,14 @@ class TycoonGame:
             print(f"\n{Fore.RED}" + figlet_format("Game Over", font="slant"))
             print(f"Your reputation hit zero. Better luck next time!{Style.RESET_ALL}")
 
-if __name__ == "__main__":
+def main():
     game = TycoonGame()
-    game.run() 
+    
+    if len(sys.argv) > 1 and sys.argv[1] == "--gui":
+        gui = TycoonGUI(game)
+        gui.run()
+    else:
+        game.run()
+
+if __name__ == "__main__":
+    main() 
