@@ -6,7 +6,7 @@ Business Tycoon Adventure offers two interface options: a Command Line Interface
 
 The CLI provides a classic text-based gaming experience with colored output and ASCII art.
 
-![CLI Screenshot](cli-screenshot.png)
+![CLI Screenshot](CLI-screenshot.png)
 
 ### CLI Features
 - Colored text using ANSI colors for better readability
@@ -27,7 +27,7 @@ The CLI provides a classic text-based gaming experience with colored output and 
 
 The GUI offers a modern, point-and-click experience using tkinter.
 
-![GUI Screenshot](gui-screenshot.png)
+![GUI Screenshot](GUI-screenshot.png)
 
 ### GUI Features
 - Clean, modern window layout with ttk widgets
