@@ -117,7 +117,13 @@ Game Tips:
         text.config(state="disabled")
         text.pack(fill=tk.BOTH, expand=True)
         
-        ttk.Button(main_dialog_frame, text="Close", command=dialog.destroy, style="Dialog.TButton").pack(pady=(10,0))
+        close_button = ttk.Button(main_dialog_frame, text="Close", command=dialog.destroy, style="Dialog.TButton")
+        close_button.pack(pady=(10,0))
+
+        # Key bindings
+        dialog.bind("<Escape>", lambda e: close_button.invoke())
+        dialog.bind("<Return>", lambda e: close_button.invoke())
+        dialog.focus_set()
 
     def show_business_map(self, event=None):
         dialog = tk.Toplevel(self.root)
@@ -156,7 +162,13 @@ Game Tips:
                             style="Dialog.TLabel", justify=tk.LEFT, padding=10)
         map_label.pack(fill=tk.BOTH, expand=True)
         
-        ttk.Button(main_dialog_frame, text="Close", command=dialog.destroy, style="Dialog.TButton").pack(pady=(10,0))
+        close_button = ttk.Button(main_dialog_frame, text="Close", command=dialog.destroy, style="Dialog.TButton")
+        close_button.pack(pady=(10,0))
+
+        # Key bindings
+        dialog.bind("<Escape>", lambda e: close_button.invoke())
+        dialog.bind("<Return>", lambda e: close_button.invoke())
+        dialog.focus_set()
 
     # Method to show generic messages, similar to CLIView
     def show_message(self, message: str, message_type: str = "info") -> None:
@@ -418,7 +430,6 @@ Game Tips:
             supply_combo.current(0) # Select first item by default and trigger update_price
         
         def handle_purchase():
-            # ... (existing handle_purchase logic, ensure it uses supply_type_key from supply_var.get().lower().replace...)
             supply_type_key = supply_var.get().lower().replace(' ', '_')
             try:
                 amount = int(amount_var.get())
@@ -454,8 +465,19 @@ Game Tips:
         button_frame = ttk.Frame(main_dialog_frame, style="Dialog.TFrame")
         button_frame.pack(pady=(15,0), fill="x")
 
-        ttk.Button(button_frame, text="Purchase", command=handle_purchase, style="Dialog.TButton").pack(side=tk.LEFT, expand=True, padx=5)
-        ttk.Button(button_frame, text="Cancel", command=dialog.destroy, style="Dialog.TButton").pack(side=tk.RIGHT, expand=True, padx=5)
+        # Store buttons for key binding
+        purchase_button = ttk.Button(button_frame, text="Purchase", command=handle_purchase, style="Dialog.TButton")
+        purchase_button.pack(side=tk.LEFT, expand=True, padx=5)
+        cancel_button = ttk.Button(button_frame, text="Cancel", command=dialog.destroy, style="Dialog.TButton")
+        cancel_button.pack(side=tk.RIGHT, expand=True, padx=5)
+
+        # Key bindings
+        dialog.bind("<Escape>", lambda e: cancel_button.invoke())
+        dialog.bind("<Return>", lambda e: purchase_button.invoke())
+        amount_entry.bind("<Return>", lambda e: purchase_button.invoke()) # Also allow enter from amount entry
+        
+        # Ensure one of the input fields gets focus initially
+        supply_combo.focus_set()
 
     def work(self):
         if sum(self.game.inventory.values()) > 0:
@@ -477,7 +499,7 @@ Game Tips:
     def manage_employees(self):
         dialog = tk.Toplevel(self.root)
         dialog.title("Manage Employees")
-        dialog.geometry("350x250") # Adjusted size
+        dialog.geometry("350x280") # Adjusted size for close button
         dialog.transient(self.root)
         dialog.grab_set()
         dialog.configure(bg="#f0f0f0")
@@ -501,7 +523,11 @@ Game Tips:
                 self.update_status()
                 dialog.destroy()
             else:
-                messagebox.showerror("Error", "Not enough money to hire!")
+                # Check for max employees specifically
+                if len(self.game.employees) >= config.MAX_EMPLOYEES:
+                    messagebox.showerror("Error", f"Cannot hire more than {config.MAX_EMPLOYEES} employees.")
+                else:
+                    messagebox.showerror("Error", "Not enough money to hire!")
         
         def fire():
             if self.game.fire_employee():
@@ -512,10 +538,21 @@ Game Tips:
                 messagebox.showerror("Error", "No employees to fire!")
         
         button_frame = ttk.Frame(main_dialog_frame, style="Dialog.TFrame")
-        button_frame.pack(pady=(15,0), fill="x", side=tk.BOTTOM)
+        button_frame.pack(pady=(15,5), fill="x") # Adjusted padding
 
-        ttk.Button(button_frame, text=f"Hire Employee (${config.EMPLOYEE_HIRE_COST if config.EMPLOYEE_HIRE_COST > 0 else 'Free'})", command=hire, style="Dialog.TButton").pack(side=tk.LEFT, expand=True, padx=5, pady=5)
-        ttk.Button(button_frame, text="Fire Employee", command=fire, style="Dialog.TButton").pack(side=tk.LEFT, expand=True, padx=5, pady=5)
+        hire_button = ttk.Button(button_frame, text=f"Hire Employee (${config.EMPLOYEE_HIRE_COST if config.EMPLOYEE_HIRE_COST > 0 else 'Free'})", command=hire, style="Dialog.TButton")
+        hire_button.pack(side=tk.LEFT, expand=True, padx=5, pady=5)
+        fire_button = ttk.Button(button_frame, text="Fire Employee", command=fire, style="Dialog.TButton")
+        fire_button.pack(side=tk.LEFT, expand=True, padx=5, pady=5)
+        
+        close_button = ttk.Button(main_dialog_frame, text="Close", command=dialog.destroy, style="Dialog.TButton")
+        close_button.pack(pady=(10,0), side=tk.BOTTOM)
+
+        # Key bindings
+        dialog.bind("<Escape>", lambda e: close_button.invoke())
+        # For <Return>, it's ambiguous. Let's make it trigger hire by default for now.
+        dialog.bind("<Return>", lambda e: hire_button.invoke())
+        dialog.focus_set() # Set focus to the dialog itself
 
     def handle_upgrades_dialog(self):
         dialog = tk.Toplevel(self.root)
@@ -585,14 +622,22 @@ Game Tips:
                              self.show_message("Upgrade failed for an unknown reason.", "error")
                 return handler
             
-            ttk.Button(frame, text=button_text, state=button_state, 
-                      command=make_upgrade_handler(upgrade_key), style="Dialog.TButton").pack(pady=5, anchor="e")
-        ttk.Button(main_dialog_frame, text="Close", command=dialog.destroy, style="Dialog.TButton").pack(pady=(10,0))
+            purchase_button = ttk.Button(frame, text=button_text, state=button_state, 
+                      command=make_upgrade_handler(upgrade_key), style="Dialog.TButton")
+            purchase_button.pack(pady=5, anchor="e")
+        
+        close_button = ttk.Button(main_dialog_frame, text="Close", command=dialog.destroy, style="Dialog.TButton")
+        close_button.pack(pady=(10,0))
+
+        # Key bindings
+        dialog.bind("<Escape>", lambda e: close_button.invoke())
+        # <Return> is not bound to a specific purchase, user must click or tab and press space/enter on a focused button.
+        dialog.focus_set()
 
     def handle_loans_dialog(self):
         dialog = tk.Toplevel(self.root)
         dialog.title("Manage Loans")
-        dialog.geometry("380x400") # Adjusted size
+        dialog.geometry("380x430") # Adjusted for close button
         dialog.transient(self.root)
         dialog.grab_set()
         dialog.configure(bg="#f0f0f0")
@@ -642,18 +687,21 @@ Game Tips:
         def take_loan():
             try:
                 amount = int(amount_var.get())
-                # Warn if amount exceeds recommended
                 if income_potential > 0 and amount > safe_max_loan:
                     if not messagebox.askyesno("Warning", 
                                             f"This loan exceeds the recommended amount based on your income.\nAre you sure you want to proceed?"):
                         return
-                
                 if self.game.take_loan(amount):
                     messagebox.showinfo("Success", f"Loan of ${amount} received!")
                     self.update_status()
                     dialog.destroy()
                 else:
-                    messagebox.showerror("Error", f"Maximum additional loan allowed: ${max_loan}")
+                    # Check max loan cap for a more specific error
+                    max_loan_possible = config.MAX_LOAN_TOTAL - self.game.loan
+                    if amount > max_loan_possible:
+                        messagebox.showerror("Error", f"Cannot take loan. Amount exceeds maximum possible additional loan of ${max_loan_possible}.")
+                    else: # General failure from take_loan, should be rare if amount is positive
+                        messagebox.showerror("Error", "Failed to process loan. Ensure amount is positive and within limits.")
             except ValueError:
                 messagebox.showerror("Error", "Please enter a valid amount")
         
@@ -670,10 +718,25 @@ Game Tips:
                 messagebox.showerror("Error", "Please enter a valid amount")
         
         button_frame = ttk.Frame(main_dialog_frame, style="Dialog.TFrame")
-        button_frame.pack(pady=(15,0), fill="x", side=tk.BOTTOM)
+        button_frame.pack(pady=(15,5), fill="x") # Adjusted padding
 
-        ttk.Button(button_frame, text="Take Loan", command=take_loan, style="Dialog.TButton").pack(side=tk.LEFT, expand=True, padx=5, pady=5)
-        ttk.Button(button_frame, text="Pay Loan", command=pay_loan, style="Dialog.TButton").pack(side=tk.LEFT, expand=True, padx=5, pady=5)
+        take_loan_button = ttk.Button(button_frame, text="Take Loan", command=take_loan, style="Dialog.TButton")
+        take_loan_button.pack(side=tk.LEFT, expand=True, padx=5, pady=5)
+        pay_loan_button = ttk.Button(button_frame, text="Pay Loan", command=pay_loan, style="Dialog.TButton")
+        pay_loan_button.pack(side=tk.LEFT, expand=True, padx=5, pady=5)
+        
+        close_button = ttk.Button(main_dialog_frame, text="Close", command=dialog.destroy, style="Dialog.TButton")
+        close_button.pack(pady=(10,0), side=tk.BOTTOM)
+
+        # Key bindings
+        dialog.bind("<Escape>", lambda e: close_button.invoke())
+        # Bind <Return> on amount_entry to trigger take_loan_button if an amount is entered
+        # otherwise, if dialog has focus, it could trigger take_loan_button too (might be too aggressive)
+        amount_entry.bind("<Return>", lambda e: take_loan_button.invoke() if amount_var.get() else None)
+        # For general <Return> on dialog, let's try take_loan_button as primary
+        dialog.bind("<Return>", lambda e: take_loan_button.invoke() if not amount_entry.focus_get() else None)
+
+        amount_entry.focus_set() # Set initial focus to amount entry
 
     def rest(self):
         self.game.rest()
@@ -788,12 +851,19 @@ Game Tips:
                     dialog.destroy() # Close research dialog
                 return handler
 
-            ttk.Button(project_info_frame, text=button_text, state=button_state,
+            start_button = ttk.Button(project_info_frame, text=button_text, state=button_state,
                        command=make_start_research_handler(key, project_spec['cost'], project_spec['name'], project_spec['duration']), 
-                       style="Dialog.TButton").pack(anchor="e", pady=5)
+                       style="Dialog.TButton")
+            start_button.pack(anchor="e", pady=5)
             ttk.Separator(scrollable_frame, orient='horizontal').pack(fill='x', pady=5)
 
-        ttk.Button(main_dialog_frame, text="Close", command=dialog.destroy, style="Dialog.TButton").pack(pady=(10,0))
+        close_button = ttk.Button(main_dialog_frame, text="Close", command=dialog.destroy, style="Dialog.TButton")
+        close_button.pack(pady=(10,0))
+
+        # Key bindings
+        dialog.bind("<Escape>", lambda e: close_button.invoke())
+        # <Return> not bound globally due to multiple start buttons.
+        dialog.focus_set()
 
     def run(self):
         self.root.mainloop() 

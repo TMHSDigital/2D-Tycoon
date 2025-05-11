@@ -100,16 +100,16 @@
   - [ ] Add autosave feature
 
 ## Quality of Life Enhancements
-- [ ] **"Buy Max" for Supplies**
+- [x] **"Buy Max" for Supplies**
   - [x] Add a "Buy Max" button to the buy supplies dialog (GUI).
   - [x] Implement calculation for max affordable/storable quantity (GUI).
   - [x] Add "max" input option for amount in CLI.
   - [x] Implement calculation for "max" in controller for CLI.
 - [ ] **"Work/Rest Again" Quick Action**
   - [ ] After work/rest, offer an option to repeat the action immediately.
-- [ ] **Keyboard Shortcuts in Dialogs**
-  - [ ] Implement `Enter` for primary dialog actions.
-  - [ ] Implement `Escape` to close/cancel dialogs.
+- [x] **Keyboard Shortcuts in Dialogs**
+  - [x] Implement `Enter` for primary dialog actions (where appropriate).
+  - [x] Implement `Escape` to close/cancel dialogs.
 - [ ] **Smart Defaults in Dialog Input Fields**
   - [ ] Pre-fill loan/repayment amounts with sensible defaults.
 - [ ] **Streamline Single-Action Day Events**
