@@ -119,4 +119,74 @@
 - [ ] Create mobile-friendly UI version
 - [ ] Add sound effects and music
 - [ ] Implement different business types/industries
-- [ ] Create an expanded narrative with character interactions 
+- [ ] Create an expanded narrative with character interactions
+
+---
+
+# Research-Driven Roadmap & Advanced TODOs
+
+## Architecture & Extensibility
+- [ ] Refactor event system to be fully event-driven (decouple systems via event manager/observer pattern)
+- [ ] Evaluate/experiment with ECS (Entity-Component-System) for businesses, employees, etc.
+- [ ] Add plugin architecture for new business types, events, or mechanics
+- [ ] Move more game data to external config (JSON/YAML) for easier balancing/modding
+- [ ] Modularize simulation logic (distinct subsystems: economy, employees, research, events, customers)
+- [ ] Use state machines for business/research/employee processes where appropriate
+
+## Economy & System Balancing
+- [ ] Centralize all economic formulas and feedback loops in config or a dedicated module
+- [ ] Add exponential/curve-based upgrade and research costs
+- [ ] Implement more feedback loops (e.g., reputation affects market, employee morale affects productivity)
+- [ ] Add tools/scripts for balancing and simulating the economy outside the main game
+
+## UI/UX & Visualization
+- [ ] Add tabbed interface to GUI for business, employees, research, marketing, stats
+- [ ] Add data visualization (charts/graphs) for business growth, employee stats, etc. (matplotlib or similar)
+- [ ] Improve CLI color coding and menu hierarchy for clarity
+- [ ] Add more contextual tooltips and help in GUI
+- [ ] Implement detailed statistics/analytics screens
+
+## Save/Load & Data Integrity
+- [ ] Add save file versioning and migration support
+- [ ] Add save file validation with checksums/hash
+- [ ] Support for multiple save slots and autosave
+- [ ] Document save format for modders
+
+## Performance & Scalability
+- [ ] Profile and batch simulation updates (avoid per-frame recalculation)
+- [ ] Use object pooling/flyweight for frequently created/destroyed objects
+- [ ] Experiment with async game loop (asyncio) for parallel systems
+- [ ] Use NumPy for heavy numerical calculations if scaling up
+
+## Automated Testing
+- [ ] Add unit tests for all core systems (economy, employees, events, research)
+- [ ] Add property-based tests for economic formulas
+- [ ] Add automated UI tests (Tkinter and CLI)
+- [ ] Mock time-based functions for fast simulation in tests
+
+## Modding & Plugins
+- [ ] Implement mod loader for external content (businesses, events, upgrades)
+- [ ] Expose clear APIs for modders (documented hooks, data formats)
+- [ ] Provide example mods and documentation
+
+## Advanced/Innovative Features
+- [ ] Integrate AI-powered competitors (basic ML for market/competitor behavior)
+- [ ] Add cloud save support (optional)
+- [ ] Add procedural content generation (unique scenarios, markets)
+- [ ] Integrate pandas for in-game data analysis/visualization
+- [ ] Add async/parallel processing for large simulations
+
+## Psychological Engagement & Player Enjoyment
+- [ ] Add variable reward systems (random events, rare upgrades, surprise bonuses)
+- [ ] Implement milestone achievements and unlocks (e.g., new features, business expansions)
+- [ ] Enhance progress feedback: visual (charts, bars), audio (sfx), and narrative (story beats, notifications)
+- [ ] Design meaningful choices with real trade-offs (risk/reward, staff vs. morale, investment dilemmas)
+- [ ] Layer complexity gradually—start simple, unlock new mechanics as player progresses
+- [ ] Support multiple viable strategies and playstyles (not just one optimal path)
+- [ ] Add daily/return incentives (login bonuses, rotating challenges, streak rewards)
+- [ ] Integrate narrative hooks (story events, evolving scenarios, character-driven events)
+- [ ] Add FOMO/habit features (limited-time events, time-limited opportunities)
+- [ ] Provide clear, incremental feedback for every action (stat changes, popups, animations)
+- [ ] Implement a system for player agency and experimentation (sandbox/test mode, creative options)
+- [ ] Use case study features: e.g., sales/review charts (Game Dev Tycoon), exponential growth (AdVenture Capitalist), creative freedom (RollerCoaster Tycoon)
+- [ ] Regularly playtest for fun and engagement, not just balance 
