@@ -1,6 +1,7 @@
 import random
 import json
 from typing import Dict, Any, List, Optional
+import config # Import the config file
 
 class GameState:
     """
@@ -8,31 +9,27 @@ class GameState:
     Encapsulates all game state and business logic.
     """
     def __init__(self):
-        # Game state variables
-        self.money = 100
-        self.reputation = 50
-        self.day = 1
+        # Game state variables from config
+        self.money = config.INITIAL_MONEY
+        self.reputation = config.INITIAL_REPUTATION
+        self.day = config.INITIAL_DAY
         self.inventory = {
             "basic_supplies": 0,
             "premium_supplies": 0,
             "equipment": 0
         }
-        self.prices = {
-            "basic_supplies": 25,  # Slightly reduced price for better early game
-            "premium_supplies": 50,  # Better value compared to basic supplies
-            "equipment": 150  # Reduced price to make it more attainable
-        }
+        self.prices = config.SUPPLY_PRICES.copy() # Use copy if prices can change in-game
         self.upgrades = {
             "automation": False,
             "marketing": 0,  # Level 0-3
             "storage": 0     # Level 0-2
         }
         self.employees: List[Dict[str, Any]] = []
-        self.market_trend = 1.0 # Initial value, will be synced with EventManager
-        self.current_market_demand = 1.0 # Actual demand after competitor/event effects
-        self.storage_capacity = 50
+        self.market_trend = config.MARKET_TREND_INITIAL
+        self.current_market_demand = config.MARKET_TREND_INITIAL
+        self.storage_capacity = config.INITIAL_STORAGE_CAPACITY
         self.loan = 0
-        self.loan_interest = 0.1  # 10% annual interest rate
+        self.loan_interest = config.ANNUAL_LOAN_INTEREST_RATE
         
         # Research related - for future integration with EventManager.research_projects
         self.research_points = 0
@@ -90,20 +87,6 @@ class GameState:
         except (FileNotFoundError, json.JSONDecodeError, KeyError):
             return False
 
-    def update_daily_market(self) -> Dict[str, Any]:
-        """Generate random daily events with market trends."""
-        self.market_trend = max(0.5, min(2.0, self.market_trend + random.uniform(-0.2, 0.2)))
-        events = {
-            "market_demand": self.market_trend,
-            "special_event": random.random() < 0.2,
-            "market_message": ""
-        }
-        if self.market_trend > 1.2:
-            events["market_message"] = "The market is booming!"
-        elif self.market_trend < 0.8:
-            events["market_message"] = "The market is in decline."
-        return events
-
     def buy_supplies(self, supply_type: str, amount: int) -> bool:
         """Buy supplies and add to inventory."""
         if supply_type not in self.prices:
@@ -127,35 +110,39 @@ class GameState:
         if total_supplies <= 0:
             return 0
 
-        base_income = random.randint(40, 80)
+        base_income = random.randint(config.BASE_WORK_INCOME_MIN, config.BASE_WORK_INCOME_MAX)
         market_modifier = self.current_market_demand 
         
-        automation_base_bonus = 1.5 if self.upgrades["automation"] else 1.0
+        automation_base_bonus = config.UPGRADE_SPECS["automation"]["income_bonus_multiplier"] if self.upgrades["automation"] else 1.0
         # Check for research-enhanced automation
         automation_efficiency_bonus = self.upgrades.get("automation_efficiency", 1.0)
         automation_bonus = automation_base_bonus * automation_efficiency_bonus
 
-        employee_bonus = (1 + (len(self.employees) * 0.4)) * self.employee_productivity_modifier
+        employee_bonus = (1 + (len(self.employees) * config.EMPLOYEE_PRODUCTIVITY_BONUS_PER_EMPLOYEE)) * self.employee_productivity_modifier
         
         income = int(base_income * market_modifier * automation_bonus * employee_bonus)
         
+        supply_used_bonus = 1.0
         if self.inventory["premium_supplies"] > 0:
-            income = int(income * 1.5)
+            supply_used_bonus = config.SUPPLY_USAGE_EFFECTS["premium_supplies"]["income_multiplier"]
             self.inventory["premium_supplies"] -= 1
         elif self.inventory["basic_supplies"] > 0:
+            supply_used_bonus = config.SUPPLY_USAGE_EFFECTS["basic_supplies"]["income_multiplier"]
             self.inventory["basic_supplies"] -= 1
         elif self.inventory["equipment"] > 0:
-            income = int(income * 1.3)
+            supply_used_bonus = config.SUPPLY_USAGE_EFFECTS["equipment"]["income_multiplier"]
             self.inventory["equipment"] -= 1
         else: # Should not happen if total_supplies > 0, but as a safeguard
             return 0
         
+        income = int(income * supply_used_bonus)
         self.money += income
-        rep_loss = random.randint(3, 8)
-        rep_loss = max(1, rep_loss - self.upgrades["marketing"])
+        rep_loss = random.randint(config.REPUTATION_LOSS_WORK_MIN, config.REPUTATION_LOSS_WORK_MAX)
+        rep_loss_reduction = self.upgrades["marketing"] * config.UPGRADE_SPECS["marketing"]["rep_loss_reduction_per_level"]
+        rep_loss = max(1, rep_loss - rep_loss_reduction)
         self.reputation -= rep_loss
         
-        employee_cost = len(self.employees) * 150
+        employee_cost = len(self.employees) * config.EMPLOYEE_DAILY_SALARY
         if employee_cost > 0:
             self.money -= employee_cost
         
@@ -163,15 +150,21 @@ class GameState:
 
     def rest(self) -> int:
         """Handle resting to recover reputation."""
-        rep_gain = 10 + (self.upgrades["marketing"] * 2)
+        rep_gain = config.BASE_REPUTATION_GAIN_REST + \
+                     (self.upgrades["marketing"] * config.UPGRADE_SPECS["marketing"]["rest_bonus_per_level"])
         self.reputation += rep_gain
+        self.reputation = min(100, self.reputation) # Cap reputation
         return rep_gain
 
     def hire_employee(self) -> bool:
         """Hire a new employee."""
-        if self.money >= 150:
-            self.employees.append({"salary": 150, "id": random.randint(1000,9999)})
-            # self.money -= 150 # Decided that salary is paid daily during work/end of day
+        if len(self.employees) >= config.MAX_EMPLOYEES:
+             # Optionally, inform the player they are at max capacity
+            return False
+        # Using EMPLOYEE_HIRE_COST from config, though currently 0
+        if self.money >= config.EMPLOYEE_HIRE_COST: 
+            self.money -= config.EMPLOYEE_HIRE_COST 
+            self.employees.append({"salary": config.EMPLOYEE_DAILY_SALARY, "id": random.randint(1000,9999)})
             return True
         return False
 
@@ -184,38 +177,38 @@ class GameState:
 
     def purchase_upgrade(self, upgrade_type: str) -> bool:
         """Purchase a business upgrade."""
-        upgrade_costs = {
-            "automation": 400,
-            "marketing": 250,
-            "storage": 150
-        }
-        
-        if upgrade_type not in upgrade_costs:
+        if upgrade_type not in config.UPGRADE_SPECS:
             return False
             
-        cost = upgrade_costs[upgrade_type]
+        spec = config.UPGRADE_SPECS[upgrade_type]
+        current_level_or_status = self.upgrades.get(upgrade_type, False if spec["max_level"] == 1 else 0)
+
+        if spec["max_level"] == 1: # Boolean upgrade (like automation)
+            if current_level_or_status: # Already purchased
+                return False 
+            cost = spec["cost"]
+        else: # Level-based upgrade
+            if current_level_or_status >= spec["max_level"]:
+                return False # Max level reached
+            cost = spec["cost_per_level"]
+
         if self.money < cost:
             return False
             
-        if upgrade_type == "automation" and not self.upgrades["automation"]:
-            self.money -= cost
-            self.upgrades["automation"] = True
-            return True
-        elif upgrade_type == "marketing" and self.upgrades["marketing"] < 3:
-            self.money -= cost
-            self.upgrades["marketing"] += 1
-            return True
-        elif upgrade_type == "storage" and self.upgrades["storage"] < 2:
-            self.money -= cost
-            self.upgrades["storage"] += 1
-            self.storage_capacity += 50
-            return True
-            
-        return False
+        self.money -= cost
+        if spec["max_level"] == 1:
+            self.upgrades[upgrade_type] = True
+        else:
+            self.upgrades[upgrade_type] = current_level_or_status + 1
+        
+        # Apply direct effects like storage capacity increase
+        if upgrade_type == "storage":
+            self.storage_capacity += spec["storage_increase_per_level"]
+        return True
 
     def take_loan(self, amount: int) -> bool:
         """Take a loan."""
-        max_loan = 1000 - self.loan
+        max_loan = config.MAX_LOAN_TOTAL - self.loan
         if amount <= 0 or amount > max_loan:
             return False
             
@@ -285,24 +278,25 @@ class GameState:
     def get_safe_loan_amount(self) -> int:
         """Calculate a safe loan amount based on income potential."""
         income_potential = self.get_income_potential()
-        max_loan_cap = 1000 # Absolute max loan
+        max_loan_cap = config.MAX_LOAN_TOTAL
         max_allowed_based_on_current_loan = max_loan_cap - self.loan
-        safe_max_loan = min(max_allowed_based_on_current_loan, income_potential * 10)
-        return max(0, safe_max_loan) # Ensure it's not negative
+        # Suggest loan repayable in ~10 days of average potential income
+        safe_max_loan = min(max_allowed_based_on_current_loan, income_potential * 10 if income_potential > 0 else 50)
+        return max(0, safe_max_loan)
 
     def is_game_over(self) -> bool:
         """Check if the game is over (win or lose)."""
-        return self.money >= 1000 or self.reputation <= 0
+        return self.money >= config.WIN_CONDITION_MONEY or self.reputation <= 0 or self.money < 0 # Added money < 0 check
 
     def is_win(self) -> bool:
         """Check if player has won."""
-        return self.money >= 1000 
+        return self.money >= config.WIN_CONDITION_MONEY
 
     # --- New methods for EventManager Integration ---
     def apply_competitor_effect(self, effect_value: float) -> None:
         """Apply effects from competitor actions."""
         # Example: Competitor action might negatively impact market trend further or player reputation
-        self.market_trend = max(0.3, min(2.5, self.market_trend + effect_value)) # Adjust market trend limits slightly
+        self.market_trend = max(config.MARKET_TREND_MIN, min(config.MARKET_TREND_MAX, self.market_trend + effect_value)) # Adjust market trend limits slightly
         # Could also impact reputation directly: self.reputation = max(0, self.reputation + int(effect_value * 50))
 
     def apply_random_event_effect(self, event_details: Dict[str, Any]) -> None:
@@ -314,7 +308,7 @@ class GameState:
             self.money -= event_details.get("amount", 0)
             self.money = max(0, self.money) # Prevent negative money from this event alone
         elif event_type == "opportunity":
-            self.market_trend = min(2.5, self.market_trend + event_details.get("market_boost", 0))
+            self.market_trend = min(config.MARKET_TREND_MAX, self.market_trend + event_details.get("market_boost", 0))
         elif event_type == "employee_event":
             emp_event = event_details.get("event", {})
             self.employee_productivity_modifier = emp_event.get("value", 1.0)
@@ -326,17 +320,20 @@ class GameState:
         if not project_key or project_key in self.completed_research:
             return
         
-        # Effects based on the updated research_projects in EventManager
+        project_spec = config.RESEARCH_PROJECTS_SPECS.get(project_key)
+        if not project_spec: return
+
+        applied_effect = False
         if project_key == "efficient_storage":
-            self.storage_capacity += 75 # Changed from 50 to 75 to match description
-            self.completed_research.append(project_key)
+            self.storage_capacity += 75 
+            applied_effect = True
         elif project_key == "smart_automation":
             self.upgrades["automation_efficiency"] = self.upgrades.get("automation_efficiency", 1.0) * 1.1 
-            self.completed_research.append(project_key)
-        elif project_key == "eco_friendly":
+            applied_effect = True
+        elif project_key == "eco_friendly_practices": # Renamed key in config
             self.reputation = min(100, self.reputation + 10)
-            self.completed_research.append(project_key)
-        # Add more elif blocks here for future research projects
+            applied_effect = True
         
-        if project_key in self.completed_research: # Check if it was successfully processed
-            self.active_research_project = None # Clear active project in GameState 
+        if applied_effect:
+            self.completed_research.append(project_key)
+            self.active_research_project = None 

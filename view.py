@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from colorama import Fore, Style
+import config # Import config
 
 class View(ABC):
     """Abstract base class for views in MVC architecture."""
@@ -48,6 +49,11 @@ class View(ABC):
         """Display research options and return player's choice (project key) or None if back."""
         pass
 
+    @abstractmethod
+    def display_upgrade_menu(self, game_state: Any) -> Optional[str]:
+        """Display upgrade options and return player's choice (upgrade key) or None if back."""
+        pass
+
 
 class CLIView(View):
     """Command Line Interface View implementation."""
@@ -83,12 +89,14 @@ class CLIView(View):
             print(f"  {item.replace('_', ' ').title()}: {amount}")
         
         print("\nUpgrades:")
-        for upgrade, level in game_state.upgrades.items():
-            if isinstance(level, bool):
-                status = "Enabled" if level else "Disabled"
-            else:
-                status = f"Level {level}"
-            print(f"  {upgrade.replace('_', ' ').title()}: {status}")
+        for upgrade_key, spec in config.UPGRADE_SPECS.items():
+            level_or_status = game_state.upgrades.get(upgrade_key, False if spec["max_level"] == 1 else 0)
+            display_status = ""
+            if spec["max_level"] == 1: # Boolean (automation)
+                display_status = f"{Fore.GREEN}Enabled{Style.RESET_ALL}" if level_or_status else f"{Fore.RED}Disabled{Style.RESET_ALL}"
+            else: # Level-based (marketing, storage)
+                display_status = f"Level {level_or_status}/{spec['max_level']}"
+            print(f"  {spec['name']}: {display_status}")
         
         if game_state.employees:
             print("\nEmployees:", len(game_state.employees))
@@ -110,12 +118,12 @@ class CLIView(View):
         print("[1] Buy supplies")
         print("[2] Work (Sell supplies)")
         print("[3] Manage employees")
-        print("[4] Purchase upgrades")
+        print(f"[4] Purchase Upgrades ({Fore.YELLOW}Business Improvements{Style.RESET_ALL})")
         print("[5] Manage loans")
         print("[6] Rest")
         print("[7] Save game")
         print("[8] Quit")
-        print("[9] Research & Development")
+        print(f"[9] Research & Development ({Fore.MAGENTA}New Technologies{Style.RESET_ALL})")
     
     def display_game_over(self, game_state: Any, is_win: bool) -> None:
         """Display game over screen."""
@@ -167,18 +175,44 @@ class CLIView(View):
     def display_employee_menu(self, game_state: Any) -> None:
         """Display employee management menu."""
         print("\nEmployee Management:")
-        print(f"Current employees: {len(game_state.employees)}")
-        print("[1] Hire employee ($150/day)")
+        print(f"Current employees: {len(game_state.employees)}/{config.MAX_EMPLOYEES}")
+        print(f"[1] Hire employee (${config.EMPLOYEE_HIRE_COST if config.EMPLOYEE_HIRE_COST > 0 else 'Free'}, Salary: ${config.EMPLOYEE_DAILY_SALARY}/day)")
         print("[2] Fire employee")
         print("[3] Back to main menu")
     
-    def display_upgrade_menu(self, game_state: Any) -> None:
-        """Display upgrades menu."""
-        print("\nAvailable Upgrades:")
-        print("[1] Automation System ($400) - Increases daily income by 50%")
-        print("[2] Marketing Campaign Level Up ($250) - Improves reputation gain and reduces reputation loss")
-        print("[3] Storage Expansion ($150) - Increases storage capacity by 50 units")
-        print("[4] Back to main menu")
+    def display_upgrade_menu(self, game_state: Any) -> Optional[str]:
+        """Display upgrade options and return player's choice (upgrade key) or None if back."""
+        print(f"\n{Fore.CYAN}=== Business Upgrades ==={Style.RESET_ALL}")
+        options = {}
+        idx = 1
+        # Create a list of keys to ensure order for selection
+        upgrade_keys_ordered = list(config.UPGRADE_SPECS.keys())
+
+        for key in upgrade_keys_ordered:
+            spec = config.UPGRADE_SPECS[key]
+            current_level_or_status = game_state.upgrades.get(key, False if spec["max_level"] == 1 else 0)
+            cost_str = ""
+            status_str = ""
+            if spec["max_level"] == 1:
+                if current_level_or_status: status_str = f"{Fore.GREEN}(Enabled){Style.RESET_ALL}"; cost_str = "N/A"
+                else: status_str = f"{Fore.RED}(Disabled){Style.RESET_ALL}"; cost_str = f"(${spec['cost']})"
+            else:
+                if current_level_or_status >= spec['max_level']:
+                    status_str = f"{Fore.GREEN}(Max Lvl {current_level_or_status}/{spec['max_level']}){Style.RESET_ALL}"; cost_str = "N/A"
+                else:
+                    status_str = f"(Lvl {current_level_or_status}/{spec['max_level']})"
+                    cost_str = f"(${spec['cost_per_level']} for Lvl {current_level_or_status+1})"
+
+            print(f"[{idx}] {spec['name']} {cost_str} - {spec['description']} {status_str}")
+            options[str(idx)] = key
+            idx += 1
+        
+        print(f"[{idx}] Back to main menu")
+        options[str(idx)] = None # For going back
+        
+        valid_choices = list(options.keys())
+        choice_num = self.get_input("Choose an upgrade to purchase or go back: ", valid_choices)
+        return options[choice_num]
     
     def display_loan_menu(self, game_state: Any) -> None:
         """Display loan management menu."""
@@ -213,8 +247,9 @@ class CLIView(View):
                               active_project_progress: int) -> Optional[str]:
         """Display research options and get player's choice."""
         print(f"\n{Fore.CYAN}=== Research & Development ==={Style.RESET_ALL}")
-        if active_project_key:
-            active_project = research_projects[active_project_key]
+        research_projects_config = config.RESEARCH_PROJECTS_SPECS
+        if active_project_key and active_project_key in research_projects_config:
+            active_project = research_projects_config[active_project_key]
             progress_percent = (active_project_progress / active_project['duration']) * 100 if active_project['duration'] > 0 else 0
             print(f"{Fore.YELLOW}Active Research: {active_project['name']} ({active_project_progress}/{active_project['duration']} days - {progress_percent:.0f}%){Style.RESET_ALL}")
         else:
@@ -223,7 +258,7 @@ class CLIView(View):
         print("\nAvailable Projects:")
         options = {}
         option_idx = 1
-        for key, project in research_projects.items():
+        for key, project in research_projects_config.items():
             status = ""
             if key in completed_research:
                 status = f"{Fore.GREEN}(Completed){Style.RESET_ALL}"
@@ -234,14 +269,12 @@ class CLIView(View):
             
             print(f"[{option_idx}] {project['name']} {status}")
             if project.get('description'):
-                 print(f"    {Fore.CYAN}└─ Description: {project['description']}{Style.RESET_ALL}")
+                 print(f"    {Fore.CYAN}└─ {project['description']}{Style.RESET_ALL}")
             options[str(option_idx)] = key
             option_idx += 1
         
         print(f"[{option_idx}] Back to main menu")
-        options[str(option_idx)] = None # For going back
-        
+        options[str(option_idx)] = None 
         valid_choices = list(options.keys())
-        choice = self.get_input("Choose a research project to start or view, or go back: ", valid_choices)
-        
+        choice = self.get_input("Choose research project or go back: ", valid_choices)
         return options[choice] 

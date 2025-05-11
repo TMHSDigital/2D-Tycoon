@@ -1,92 +1,67 @@
 import random
 from typing import Dict, Any
 from colorama import Fore, Style
+import config # Import the config file
 
 class EventManager:
     def __init__(self):
-        self.market_trend = 1.0
+        self.market_trend = config.MARKET_TREND_INITIAL
         self.competitors = [
             {"name": "SmallBiz Inc.", "market_share": 0.2, "aggressive": False},
             {"name": "MegaCorp", "market_share": 0.4, "aggressive": True}
         ]
-        self.research_projects = {
-            "efficient_storage": {
-                "name": "Efficient Storage Solutions", 
-                "cost": 400, 
-                "duration": 5, 
-                "description": "Increases your total storage capacity by 75 units.",
-                "completed": False # Internal flag for EventManager, GameState.completed_research is canonical for player
-            },
-            "smart_automation": {
-                "name": "Smart Automation Systems", 
-                "cost": 600, 
-                "duration": 7, 
-                "description": "Boosts income from automated processes by an additional 10%.",
-                "completed": False
-            },
-            "eco_friendly": {
-                "name": "Eco-Friendly Practices", 
-                "cost": 300, 
-                "duration": 4, 
-                "description": "Improves public image, granting a permanent +10 reputation boost.",
-                "completed": False
-            },
-            # Example of a new research project we could add later
-            # "advanced_marketing": {
-            #     "name": "Advanced Marketing Campaigns",
-            #     "cost": 500,
-            #     "duration": 6,
-            #     "description": "Significantly reduces reputation loss from working and boosts passive reputation gain.",
-            #     "completed": False
-            # }
-        }
-        self.active_research = None
+        # Research projects are now primarily defined in config.RESEARCH_PROJECTS_SPECS
+        # EventManager will use it for names, costs, durations but won't store its own full copy for effects.
+        self.research_projects_data = config.RESEARCH_PROJECTS_SPECS.copy()
+        # Add a 'completed' flag for EventManager's internal tracking if needed for its own logic,
+        # but GameState.completed_research is the source of truth for player progression.
+        for key in self.research_projects_data:
+            self.research_projects_data[key]['completed'] = False # Initial runtime state
+            
+        self.active_research: Optional[str] = None
         self.research_progress = 0
 
     def update_market(self) -> Dict[str, Any]:
         """Update market conditions based on competitor actions."""
         competitor_influence = sum(c["market_share"] for c in self.competitors)
-        market_pressure = random.uniform(-0.2, 0.2)
+        market_pressure = random.uniform(config.MARKET_TREND_DAILY_FLUCTUATION_RANGE[0], config.MARKET_TREND_DAILY_FLUCTUATION_RANGE[1])
         
-        # Aggressive competitors have more impact
         for competitor in self.competitors:
             if competitor["aggressive"]:
-                market_pressure -= 0.1
+                market_pressure += config.AGGRESSIVE_COMPETITOR_MARKET_PRESSURE
         
-        self.market_trend = max(0.5, min(2.0, self.market_trend + market_pressure))
+        self.market_trend = max(config.MARKET_TREND_MIN, min(config.MARKET_TREND_MAX, self.market_trend + market_pressure))
         
         events = {
-            "market_demand": self.market_trend * (1 - competitor_influence * 0.5),
-            "special_event": random.random() < 0.2,
+            "market_demand": self.market_trend * (1 - competitor_influence * config.COMPETITOR_INFLUENCE_FACTOR_ON_DEMAND),
+            "special_event": random.random() < config.SPECIAL_EVENT_CHANCE,
             "market_message": "",
             "competitor_action": None
         }
 
-        # Competitor actions
-        if random.random() < 0.3:  # 30% chance of competitor action
+        if random.random() < config.COMPETITOR_ACTION_CHANCE:
             acting_competitor = random.choice(self.competitors)
-            action = random.choice(["price_war", "marketing_campaign", "expansion"])
+            action_type = random.choice(list(config.COMPETITOR_EFFECTS.keys()))
             events["competitor_action"] = {
                 "competitor": acting_competitor["name"],
-                "action": action
+                "action": action_type
             }
 
-        # Market status messages
-        if self.market_trend > 1.2:
+        if self.market_trend > config.MARKET_BOOM_THRESHOLD:
             events["market_message"] = f"{Fore.GREEN}The market is booming!{Style.RESET_ALL}"
-        elif self.market_trend < 0.8:
+        elif self.market_trend < config.MARKET_DECLINE_THRESHOLD:
             events["market_message"] = f"{Fore.RED}The market is in decline.{Style.RESET_ALL}"
-
         return events
 
-    def handle_competitor_action(self, action: Dict[str, str]) -> tuple[str, float]:
+    def handle_competitor_action(self, action_details: Dict[str, str]) -> tuple[str, float]:
         """Handle competitor actions and their effects."""
-        effects = {
-            "price_war": (f"{action['competitor']} started a price war!", -0.2),
-            "marketing_campaign": (f"{action['competitor']} launched a major marketing campaign!", -0.1),
-            "expansion": (f"{action['competitor']} expanded their business!", -0.15)
-        }
-        return effects[action["action"]]
+        competitor_name = action_details["competitor"]
+        action_type = action_details["action"]
+        effect_spec = config.COMPETITOR_EFFECTS.get(action_type)
+        if effect_spec:
+            message = effect_spec["message_template"].format(competitor_name)
+            return message, effect_spec["market_trend_effect"]
+        return f"{competitor_name} did something unexpected!", 0.0
 
     def update_research(self) -> Dict[str, Any]:
         """Update research progress and return research status."""
@@ -94,21 +69,27 @@ class EventManager:
             return {"status": "no_research"}
             
         self.research_progress += 1
-        project = self.research_projects[self.active_research]
+        # Use self.research_projects_data which refers to config specs
+        project_config = self.research_projects_data[self.active_research]
+        project_duration = project_config["duration"]
         
-        if self.research_progress >= project["duration"]:
-            project["completed"] = True
-            completed_project = self.active_research
+        if self.research_progress >= project_duration:
+            # The 'completed' flag in self.research_projects_data is just for EventManager's internal reference if needed.
+            # GameState.completed_research is the canonical list of *player completed* projects.
+            # If we want to mark it here for some reason: 
+            # self.research_projects_data[self.active_research]['completed'] = True
+            
+            completed_project_key = self.active_research
             self.active_research = None
             self.research_progress = 0
             return {
                 "status": "completed",
-                "project": completed_project
+                "project": completed_project_key
             }
             
         return {
             "status": "in_progress",
-            "progress": (self.research_progress / project["duration"]) * 100
+            "progress": (self.research_progress / project_duration) * 100 if project_duration > 0 else 0
         }
 
     def get_random_event(self) -> Dict[str, Any]:

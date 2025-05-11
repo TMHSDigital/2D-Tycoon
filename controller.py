@@ -6,6 +6,7 @@ from typing import Dict, Any
 from game_state import GameState
 from view import View
 from game_events import EventManager
+import config
 
 class GameController:
     """Controller class in MVC architecture to handle game flow."""
@@ -82,7 +83,7 @@ class GameController:
                 if research_status.get("status") == "completed":
                     completed_project_key = research_status.get("project")
                     if completed_project_key:
-                        project_name = self.event_manager.research_projects[completed_project_key]['name']
+                        project_name = self.event_manager.research_projects_data[completed_project_key]['name']
                         self.view.show_message(f"RESEARCH COMPLETE: '{project_name}'! Effects applied.", "success")
                         self.game_state.apply_research_completion(completed_project_key)
                         # EventManager.update_research already sets its active_research to None and progress to 0 on completion.
@@ -125,7 +126,7 @@ class GameController:
         current_total = sum(self.game_state.inventory.values())
         max_purchase = min(
             self.game_state.storage_capacity - current_total,
-            self.game_state.money // self.game_state.prices[supply_type]
+            self.game_state.money // config.prices[supply_type]
         )
         
         if max_purchase <= 0:
@@ -138,7 +139,7 @@ class GameController:
         )
         
         if amount > 0:
-            cost = amount * self.game_state.prices[supply_type]
+            cost = amount * config.prices[supply_type]
             if self.game_state.buy_supplies(supply_type, amount):
                 self.view.show_message(f"Bought {amount} {supply_type.replace('_', ' ')} for ${cost}", "success")
             else:
@@ -175,31 +176,39 @@ class GameController:
     
     def handle_upgrades(self) -> None:
         """Handle purchasing upgrades."""
-        self.view.display_upgrade_menu(self.game_state)
+        # View now returns the direct upgrade_key or None
+        upgrade_key_selected = self.view.display_upgrade_menu(self.game_state)
         
-        choice = self.view.get_input("Choose an upgrade (1-4): ", ["1", "2", "3", "4"])
-        if choice == "4":
-            return
+        if not upgrade_key_selected:
+            return # Player chose to go back
             
-        upgrade_types = ["automation", "marketing", "storage"]
-        upgrade_type = upgrade_types[int(choice) - 1]
+        # upgrade_types = ["automation", "marketing", "storage"] # No longer needed
+        # upgrade_type = upgrade_types[int(choice) - 1] # Old way
+        upgrade_type = upgrade_key_selected # Use the key directly
         
         if self.game_state.purchase_upgrade(upgrade_type):
-            if upgrade_type == "automation":
-                self.view.show_message("Automation system installed!", "success")
-            elif upgrade_type == "marketing":
-                self.view.show_message(f"Marketing level increased to {self.game_state.upgrades['marketing']}!", "success")
-            elif upgrade_type == "storage":
-                self.view.show_message(f"Storage capacity increased to {self.game_state.storage_capacity}!", "success")
+            spec = config.UPGRADE_SPECS[upgrade_type]
+            if upgrade_type == "automation": # Max_level 1 type
+                self.view.show_message(f"{spec['name']} purchased!", "success")
+            else: # Level based type
+                self.view.show_message(f"{spec['name']} upgraded to level {self.game_state.upgrades[upgrade_type]}!", "success")
+            # Storage capacity is updated within GameState.purchase_upgrade
+            if upgrade_type == "storage":
+                 self.view.show_message(f"Storage capacity increased to {self.game_state.storage_capacity}!", "info") # Additional info message
+
         else:
-            if upgrade_type == "automation" and self.game_state.upgrades["automation"]:
-                self.view.show_message("Automation is already enabled!", "warning")
-            elif upgrade_type == "marketing" and self.game_state.upgrades["marketing"] >= 3:
-                self.view.show_message("Marketing is already at maximum level!", "warning")
-            elif upgrade_type == "storage" and self.game_state.upgrades["storage"] >= 2:
-                self.view.show_message("Storage is already at maximum level!", "warning")
-            else:
+            # Error messaging improved in GameState.purchase_upgrade or can be handled here based on GameState state
+            spec = config.UPGRADE_SPECS[upgrade_type]
+            current_level_or_status = self.game_state.upgrades.get(upgrade_type, False if spec["max_level"] == 1 else 0)
+            cost = spec['cost'] if spec['max_level'] == 1 else spec['cost_per_level']
+
+            if self.game_state.money < cost:
                 self.view.show_message("Not enough money for this upgrade!", "error")
+            elif (spec["max_level"] == 1 and current_level_or_status) or \
+                 (spec["max_level"] > 1 and current_level_or_status >= spec['max_level']):
+                self.view.show_message(f"{spec['name']} is already at maximum or purchased.", "warning")
+            else:
+                self.view.show_message("Failed to purchase upgrade for an unknown reason.", "error")
     
     def handle_loans(self) -> None:
         """Handle loan management."""
@@ -250,9 +259,8 @@ class GameController:
 
     def handle_start_research(self) -> None:
         """Handle starting a new research project."""
-        # Pass event_manager attributes directly for the view to use
         research_choice_key = self.view.display_research_menu(
-            self.event_manager.research_projects,
+            config.RESEARCH_PROJECTS_SPECS,
             self.game_state.completed_research,
             self.event_manager.active_research,
             self.event_manager.research_progress
@@ -266,10 +274,10 @@ class GameController:
             return
 
         if self.event_manager.active_research is not None:
-            self.view.show_message(f"Research for '{self.event_manager.research_projects[self.event_manager.active_research]['name']}' is already in progress.", "warning")
+            self.view.show_message(f"Research for '{self.event_manager.research_projects_data[self.event_manager.active_research]['name']}' is already in progress.", "warning")
             return
 
-        project_details = self.event_manager.research_projects.get(research_choice_key)
+        project_details = self.event_manager.research_projects_data.get(research_choice_key)
         if not project_details:
             self.view.show_message("Invalid research project selected.", "error") # Should not happen with proper menu
             return

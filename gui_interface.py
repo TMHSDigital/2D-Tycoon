@@ -4,6 +4,7 @@ from business_map import BusinessMap
 from game_state import GameState
 from colorama import Fore, Style
 from typing import Optional, Any
+import config # Import config
 
 class ToolTip:
     def __init__(self, widget, text):
@@ -228,51 +229,40 @@ Game Tips:
         self.inventory_text.config(state='disabled')
 
         # Action Buttons Frame with Tooltips
-        actions_frame = ttk.LabelFrame(main_frame, text="Game Actions", padding="15") # Changed title
+        actions_frame = ttk.LabelFrame(main_frame, text="Game Actions", padding="15")
         actions_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=10)
 
-        tooltips = {
-            "Buy Supplies": "Purchase supplies to sell for profit",
-            "Work": "Sell supplies to earn money",
-            "Manage Employees": "Hire or fire employees",
-            "Upgrades": "Purchase business upgrades",
-            "Loans": "Take or pay back loans",
-            "Rest": "Rest to improve reputation",
-            "Save Game": "Save your progress (Ctrl+S)",
-            "Quit": "Exit the game (Ctrl+Q)"
-        }
-
-        actions = [
-            ("Buy Supplies", self.buy_supplies),
-            ("Work", self.work),
-            ("Manage Employees", self.manage_employees),
-            ("Upgrades", self.handle_upgrades),
-            ("Loans", self.handle_loans),
-            ("Rest", self.rest),
-            ("Save Game", self.save_game),
-            ("Quit", self.quit_game)
+        # Define actions and their commands
+        # Upgrades and Research will use data from config
+        action_definitions = [
+            {"text": "Buy Supplies", "command": self.buy_supplies, "tooltip": "Purchase supplies to sell for profit"},
+            {"text": "Work", "command": self.work, "tooltip": "Sell supplies to earn money"},
+            {"text": "Manage Employees", "command": self.manage_employees, "tooltip": "Hire or fire employees"},
+            {"text": f"Upgrades ({config.UPGRADE_SPECS['automation']['name']}, etc.)", "command": self.handle_upgrades_dialog, "tooltip": "Purchase business improvements"},
+            {"text": "Loans", "command": self.handle_loans_dialog, "tooltip": "Take or pay back loans"},
+            {"text": "Rest", "command": self.rest, "tooltip": "Rest to improve reputation"},
+            {"text": f"Research ({config.RESEARCH_PROJECTS_SPECS[next(iter(config.RESEARCH_PROJECTS_SPECS))]['name']}, etc.)", "command": self.handle_research_dialog, "tooltip": "Manage R&D projects"}, # Updated text for Research
+            {"text": "Save Game", "command": self.save_game, "tooltip": "Save your progress (Ctrl+S)"},
+            {"text": "Quit", "command": self.quit_game, "tooltip": "Exit the game (Ctrl+Q)"}
         ]
-        # Add Research button before Map button
-        actions.insert(6, ("Research", self.handle_research_dialog)) 
 
-        for i, (text, command) in enumerate(actions):
-            btn = ttk.Button(actions_frame, text=text, command=command)
-            btn.grid(row=i // 2, column=i % 2, padx=5, pady=5, sticky="ew")
-            # Update tooltips dictionary if new actions are added
-            if text in tooltips:
-                 ToolTip(btn, tooltips[text])
-            elif text == "Research":
-                ToolTip(btn, "Manage Research & Development projects")
-
-        # Adjust Map Button grid position if necessary based on new total number of actions
-        map_btn_row = len(actions) // 2
-        map_btn_col = len(actions) % 2
-        if map_btn_col == 0 and len(actions) % 2 !=0 : # if it would be the only button on a new row, put it on previous row, second column
-             map_btn_row -=1
-             map_btn_col =1
-        if len(actions) % 2 == 0: # If actions make full rows, map button starts a new row
-            map_btn_row = len(actions) // 2
-            map_btn_col = 0 
+        row, col = 0, 0
+        for i, action_spec in enumerate(action_definitions):
+            btn = ttk.Button(actions_frame, text=action_spec["text"], command=action_spec["command"])
+            btn.grid(row=row, column=col, padx=5, pady=5, sticky="ew")
+            ToolTip(btn, action_spec["tooltip"])
+            col += 1
+            if col > 1:
+                col = 0
+                row += 1
+        
+        # Map Button - ensure it's placed correctly after dynamic buttons
+        if col == 0: # starts a new row
+            map_btn_row = row
+            map_btn_col = 0
+        else: # place on current row, next column
+            map_btn_row = row 
+            map_btn_col = col
 
         map_btn = ttk.Button(actions_frame, text="Show Map", command=self.show_business_map)
         map_btn.grid(row=map_btn_row, column=map_btn_col, padx=5, pady=5, sticky="ew")
@@ -306,34 +296,37 @@ Game Tips:
         # Update inventory display
         self.inventory_text.config(state='normal')
         self.inventory_text.delete(1.0, tk.END)
-        
-        inventory_text_content = f"Day: {self.game.day}\n\n"
-        inventory_text_content += "Inventory:\n"
+        inventory_text_content = f"Day: {self.game.day}\n\nInventory:\n"
         for item, amount in self.game.inventory.items():
             inventory_text_content += f"  {item.replace('_', ' ').title()}: {amount}\n"
+        inventory_text_content += f"  Storage: {sum(self.game.inventory.values())}/{self.game.storage_capacity}\n"
         
         inventory_text_content += "\nUpgrades:\n"
-        for upgrade, level in self.game.upgrades.items():
-            if isinstance(level, bool):
-                status_text = "Enabled" if level else "Disabled"
+        for ug_key, ug_spec in config.UPGRADE_SPECS.items():
+            level_or_status = self.game.upgrades.get(ug_key, False if ug_spec["max_level"] == 1 else 0)
+            status_text = ""
+            if ug_spec["max_level"] == 1:
+                status_text = "Enabled" if level_or_status else "Disabled"
             else:
-                status_text = f"Level {level}"
-            inventory_text_content += f"  {upgrade.replace('_', ' ').title()}: {status_text}\n"
-        
+                status_text = f"Level {level_or_status}/{ug_spec['max_level']}"
+            inventory_text_content += f"  {ug_spec['name']}: {status_text}\n"
+        # Researched automation efficiency
+        if self.game.upgrades.get("automation_efficiency", 1.0) > 1.0:
+            inventory_text_content += f"    └ Smart Automation Bonus: {((self.game.upgrades['automation_efficiency'] - 1) * 100):.0f}%\n"
+
         if self.game.employees:
-             inventory_text_content += f"\nEmployees: {len(self.game.employees)}\n"
+             inventory_text_content += f"\nEmployees: {len(self.game.employees)}/{config.MAX_EMPLOYEES}\n"
         if self.game.loan > 0:
             inventory_text_content += f"Loan: ${self.game.loan}\n"
 
-        # Add active research to inventory_text_content
         if self.game.active_research_project and self.controller_ref:
-            event_manager = self.controller_ref.event_manager
-            active_project_details = event_manager.research_projects.get(self.game.active_research_project)
-            if active_project_details:
-                progress = event_manager.research_progress
-                duration = active_project_details['duration']
+            event_mngr = self.controller_ref.event_manager
+            active_proj_spec = config.RESEARCH_PROJECTS_SPECS.get(self.game.active_research_project)
+            if active_proj_spec:
+                progress = event_mngr.research_progress
+                duration = active_proj_spec['duration']
                 progress_percent = (progress / duration) * 100 if duration > 0 else 0
-                inventory_text_content += f"\nActive Research: {active_project_details['name']} ({progress}/{duration} - {progress_percent:.0f}%)\n"
+                inventory_text_content += f"\nActive Research: {active_proj_spec['name']} ({progress}/{duration} - {progress_percent:.0f}%)\n"
 
         self.inventory_text.insert(1.0, inventory_text_content)
         self.inventory_text.config(state='disabled')
@@ -452,7 +445,7 @@ Game Tips:
         main_dialog_frame.pack(fill="both", expand=True)
 
         ttk.Label(main_dialog_frame, text=f"Current employees: {len(self.game.employees)}", style="Dialog.TLabel").pack(pady=5, anchor="w")
-        ttk.Label(main_dialog_frame, text=f"Daily cost per employee: $150", style="Dialog.TLabel").pack(pady=5, anchor="w")
+        ttk.Label(main_dialog_frame, text=f"Daily cost per employee: ${config.EMPLOYEE_DAILY_SALARY}", style="Dialog.TLabel").pack(pady=5, anchor="w")
         ttk.Label(main_dialog_frame, text=f"Productivity boost per employee: 40%", style="Dialog.TLabel").pack(pady=(5,10), anchor="w")
         
         def hire():
@@ -474,13 +467,13 @@ Game Tips:
         button_frame = ttk.Frame(main_dialog_frame, style="Dialog.TFrame")
         button_frame.pack(pady=(15,0), fill="x", side=tk.BOTTOM)
 
-        ttk.Button(button_frame, text="Hire Employee ($150)", command=hire, style="Dialog.TButton").pack(side=tk.LEFT, expand=True, padx=5, pady=5)
+        ttk.Button(button_frame, text=f"Hire Employee (${config.EMPLOYEE_HIRE_COST if config.EMPLOYEE_HIRE_COST > 0 else 'Free'})", command=hire, style="Dialog.TButton").pack(side=tk.LEFT, expand=True, padx=5, pady=5)
         ttk.Button(button_frame, text="Fire Employee", command=fire, style="Dialog.TButton").pack(side=tk.LEFT, expand=True, padx=5, pady=5)
 
-    def handle_upgrades(self):
+    def handle_upgrades_dialog(self):
         dialog = tk.Toplevel(self.root)
-        dialog.title("Purchase Upgrades")
-        dialog.geometry("450x350") # Adjusted size
+        dialog.title("Business Upgrades") # Updated title
+        dialog.geometry("500x400") 
         dialog.transient(self.root)
         dialog.grab_set()
         dialog.configure(bg="#f0f0f0")
@@ -492,52 +485,64 @@ Game Tips:
         style.configure("Dialog.TLabelframe.Label", background="#f0f0f0", foreground="#00529B", font=("Segoe UI", 11, "bold"))
         style.configure("Dialog.TButton", font=("Segoe UI", 10, "bold"), padding=5)
         
-        upgrades = {
-            "automation": {"cost": 400, "name": "Automation System", "description": "Increases daily income by 50%"},
-            "marketing": {"cost": 250, "name": "Marketing Campaign", "description": "Improves reputation gain and reduces loss"},
-            "storage": {"cost": 150, "name": "Storage Expansion", "description": "Increases storage capacity by 50 units"}
-        }
-        
-        main_dialog_frame = ttk.Frame(dialog, padding=10, style="Dialog.TFrame")
+        main_dialog_frame = ttk.Frame(dialog, padding=15, style="Dialog.TFrame")
         main_dialog_frame.pack(fill="both", expand=True)
-        style.configure("Dialog.TFrame", background="#f0f0f0")
 
-        for upgrade_key, upgrade_info in upgrades.items():
-            frame = ttk.LabelFrame(main_dialog_frame, text=upgrade_info["name"], padding=10, style="Dialog.TLabelframe")
+        for upgrade_key, spec in config.UPGRADE_SPECS.items():
+            frame = ttk.LabelFrame(main_dialog_frame, text=spec["name"], padding=10, style="Dialog.TLabelframe")
             frame.pack(pady=10, fill="x", padx=10)
             
-            current_level = self.game.upgrades[upgrade_key]
-            if isinstance(current_level, bool):
-                status = "Enabled" if current_level else "Disabled"
-            else:
-                status = f"Level {current_level}"
+            current_level_or_status = self.game.upgrades.get(upgrade_key, False if spec["max_level"] == 1 else 0)
+            status_text = ""
+            button_text = "Purchase"
+            button_state = tk.NORMAL
+            cost_text = f"Cost: ${spec['cost'] if spec['max_level'] == 1 else spec['cost_per_level']}"
+
+            if spec["max_level"] == 1: # Boolean (automation)
+                if current_level_or_status:
+                    status_text = "Enabled"
+                    button_state = tk.DISABLED
+                    cost_text = "(Purchased)"
+                else:
+                    status_text = "Disabled"
+            else: # Level-based (marketing, storage)
+                status_text = f"Level {current_level_or_status}/{spec['max_level']}"
+                if current_level_or_status >= spec['max_level']:
+                    button_state = tk.DISABLED
+                    cost_text = "(Max Level)"
+                else:
+                    cost_text = f"Cost: ${spec['cost_per_level']} (for Lvl {current_level_or_status + 1})"
+
+            ttk.Label(frame, text=spec['description'], style="Dialog.TLabel", wraplength=430).pack(anchor="w", pady=2)
+            ttk.Label(frame, text=cost_text, style="Dialog.TLabel").pack(anchor="w", pady=2)
+            ttk.Label(frame, text=f"Current: {status_text}", style="Dialog.TLabel").pack(anchor="w", pady=2)
             
-            ttk.Label(frame, text=f"{upgrade_info['description']}", style="Dialog.TLabel", wraplength=380).pack(anchor="w", pady=2)
-            ttk.Label(frame, text=f"Cost: ${upgrade_info['cost']}", style="Dialog.TLabel").pack(anchor="w", pady=2)
-            ttk.Label(frame, text=f"Current: {status}", style="Dialog.TLabel").pack(anchor="w", pady=2)
-            
-            def make_upgrade_handler(key, cost):
+            def make_upgrade_handler(key_to_upgrade):
                 def handler():
-                    if self.game.purchase_upgrade(key):
-                        messagebox.showinfo("Success", f"{upgrades[key]['name']} purchased!")
+                    # Logic now uses GameState.purchase_upgrade which uses config
+                    if self.game.purchase_upgrade(key_to_upgrade):
+                        self.show_message(f"{config.UPGRADE_SPECS[key_to_upgrade]['name']} upgraded/purchased!", "success")
                         self.update_status()
                         dialog.destroy()
                     else:
-                        # Check why it failed
-                        if isinstance(self.game.upgrades[key], bool) and self.game.upgrades[key]:
-                            messagebox.showinfo("Notice", "Already purchased!")
-                        elif not isinstance(self.game.upgrades[key], bool) and self.game.upgrades[key] >= 3:
-                            messagebox.showinfo("Notice", "Maximum level reached!")
-                        else:
-                            messagebox.showerror("Error", "Not enough money!")
+                        # More specific error based on why purchase_upgrade might fail (already owned, max level, or insufficient funds)
+                        current_val = self.game.upgrades.get(key_to_upgrade, 0)
+                        spec_check = config.UPGRADE_SPECS[key_to_upgrade]
+                        cost_check = spec_check['cost'] if spec_check['max_level'] == 1 else spec_check['cost_per_level']
+                        if self.game.money < cost_check:
+                            self.show_message("Not enough money!", "error")
+                        elif (spec_check['max_level'] == 1 and current_val) or \
+                             (spec_check['max_level'] > 1 and current_val >= spec_check['max_level']):
+                            self.show_message("Already at maximum or purchased!", "warning")
+                        else: # General fail, should be rare
+                             self.show_message("Upgrade failed for an unknown reason.", "error")
                 return handler
             
-            ttk.Button(frame, text="Purchase", 
-                      command=make_upgrade_handler(upgrade_key, upgrade_info["cost"])).pack(pady=5)
-        
-        ttk.Button(dialog, text="Close", command=dialog.destroy).pack(pady=10)
+            ttk.Button(frame, text=button_text, state=button_state, 
+                      command=make_upgrade_handler(upgrade_key), style="Dialog.TButton").pack(pady=5, anchor="e")
+        ttk.Button(main_dialog_frame, text="Close", command=dialog.destroy, style="Dialog.TButton").pack(pady=(10,0))
 
-    def handle_loans(self):
+    def handle_loans_dialog(self):
         dialog = tk.Toplevel(self.root)
         dialog.title("Manage Loans")
         dialog.geometry("380x400") # Adjusted size
@@ -672,11 +677,12 @@ Game Tips:
         active_research_frame = ttk.LabelFrame(main_dialog_frame, text="Active Project", padding=10, style="Dialog.TLabelframe")
         active_research_frame.pack(pady=10, fill="x")
         if event_manager.active_research:
-            active_project = event_manager.research_projects[event_manager.active_research]
-            progress_percent = (event_manager.research_progress / active_project['duration']) * 100 if active_project['duration'] > 0 else 0
-            ttk.Label(active_research_frame, 
-                      text=f"{active_project['name']} ({event_manager.research_progress}/{active_project['duration']} days - {progress_percent:.0f}% complete)", 
-                      style="Dialog.TLabel", font=("Segoe UI", 10, "italic")).pack(anchor="w")
+            active_project_spec = config.RESEARCH_PROJECTS_SPECS.get(event_manager.active_research)
+            if active_project_spec:
+                progress_percent = (event_manager.research_progress / active_project_spec['duration']) * 100 if active_project_spec['duration'] > 0 else 0
+                ttk.Label(active_research_frame, 
+                          text=f"{active_project_spec['name']} ({event_manager.research_progress}/{active_project_spec['duration']} days - {progress_percent:.0f}% complete)", 
+                          style="Dialog.TLabel", font=("Segoe UI", 10, "italic")).pack(anchor="w")
         else:
             ttk.Label(active_research_frame, text="No active research project.", style="Dialog.TLabel", font=("Segoe UI", 10, "italic")).pack(anchor="w")
 
@@ -696,7 +702,7 @@ Game Tips:
         canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        for key, project in event_manager.research_projects.items():
+        for key, project_spec in config.RESEARCH_PROJECTS_SPECS.items():
             project_info_frame = ttk.Frame(scrollable_frame, padding=(0,0,0,10), style="Dialog.TFrame") # Padding at bottom of each item
             project_info_frame.pack(fill="x")
 
@@ -711,11 +717,11 @@ Game Tips:
                 status_text = "(In Progress)"
                 button_state = tk.DISABLED
             
-            ttk.Label(project_info_frame, text=f"{project['name']} {status_text}", style="Dialog.TLabel", font=("Segoe UI", 10, "bold")).pack(anchor="w")
-            ttk.Label(project_info_frame, text=f"Cost: ${project['cost']} | Duration: {project['duration']} days", style="Dialog.TLabel").pack(anchor="w")
+            ttk.Label(project_info_frame, text=f"{project_spec['name']} {status_text}", style="Dialog.TLabel", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+            ttk.Label(project_info_frame, text=f"Cost: ${project_spec['cost']} | Duration: {project_spec['duration']} days", style="Dialog.TLabel").pack(anchor="w")
             # Display project description
-            if project.get('description'):
-                ttk.Label(project_info_frame, text=project['description'], style="Dialog.TLabel", wraplength=450, justify=tk.LEFT).pack(anchor="w", pady=(2,0))
+            if project_spec.get('description'):
+                ttk.Label(project_info_frame, text=project_spec['description'], style="Dialog.TLabel", wraplength=450, justify=tk.LEFT).pack(anchor="w", pady=(2,0))
 
             def make_start_research_handler(p_key, p_cost, p_name, p_duration):
                 def handler():
@@ -736,7 +742,7 @@ Game Tips:
                 return handler
 
             ttk.Button(project_info_frame, text=button_text, state=button_state,
-                       command=make_start_research_handler(key, project['cost'], project['name'], project['duration']), 
+                       command=make_start_research_handler(key, project_spec['cost'], project_spec['name'], project_spec['duration']), 
                        style="Dialog.TButton").pack(anchor="e", pady=5)
             ttk.Separator(scrollable_frame, orient='horizontal').pack(fill='x', pady=5)
 

@@ -43,9 +43,9 @@
 
 ## Priority 3: Code Quality Improvements
 - [ ] **Remove hardcoded values**
-  - [ ] Create config.py with game parameters
+  - [x] Create `config.py` with game parameters
   - [ ] Add difficulty settings (easy, normal, hard)
-  - [ ] Make all magic numbers configurable constants
+  - [x] Make all magic numbers configurable constants (covered by config.py creation)
 
 - [ ] **Eliminate redundant code**
   - [ ] Consolidate display functions from main.py and ui_helpers.py
