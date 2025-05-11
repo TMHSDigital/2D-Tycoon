@@ -45,27 +45,47 @@ class TycoonGUI:
         # --- Style Configuration ---
         self.style = ttk.Style(self.root)
         available_themes = self.style.theme_names()
-        # print(f"Available themes: {available_themes}") # To check available themes
         if "clam" in available_themes:
             self.style.theme_use("clam") 
         elif "alt" in available_themes:
             self.style.theme_use("alt")
-        
-        self.style.configure("TLabel", background="#f0f0f0", foreground="#333333", font=("Segoe UI", 10))
-        self.style.configure("TButton", font=("Segoe UI", 10, "bold"), padding=10, relief="flat")
-        self.style.map("TButton",
-            foreground=[('pressed', 'white'), ('active', 'white')],
-            background=[('pressed', '!disabled', '#00529B'), ('active', '#0078D4'), ('!disabled', '#0078D4')],
+        # Modern font and color palette
+        base_font = ("Segoe UI", 11)
+        header_font = ("Segoe UI", 14, "bold")
+        subheader_font = ("Segoe UI", 12, "bold")
+        light_font = ("Segoe UI", 10, "normal")
+        # Fallbacks for non-Windows
+        try:
+            self.root.option_add("*Font", "Segoe UI 11")
+        except:
+            self.root.option_add("*Font", "Arial 11")
+        # Backgrounds
+        self.style.configure("TFrame", background="#f7f9fa")
+        self.style.configure("Background.TFrame", background="#f7f9fa")
+        self.style.configure("TLabel", background="#f7f9fa", foreground="#222", font=base_font)
+        self.style.configure("Header.TLabel", background="#f7f9fa", foreground="#00529B", font=header_font)
+        self.style.configure("SubHeader.TLabel", background="#f7f9fa", foreground="#0078D4", font=subheader_font)
+        self.style.configure("Light.TLabel", background="#f7f9fa", foreground="#666", font=light_font)
+        # Button style: rounded, soft blue, drop shadow, hover effect
+        self.style.configure("Modern.TButton", font=base_font, padding=12, relief="flat", borderwidth=0,
+            background="#2196F3", foreground="#fff")
+        self.style.map("Modern.TButton",
+            background=[('active', '#42a5f5'), ('!active', '#2196F3')],
             relief=[('pressed', 'sunken'), ('!pressed', 'raised')])
-            
-        self.style.configure("TLabelframe", background="#f0f0f0", font=("Segoe UI", 12, "bold"), borderwidth=1, relief="groove")
-        self.style.configure("TLabelframe.Label", background="#f0f0f0", foreground="#00529B", font=("Segoe UI", 12, "bold"))
+        # Add rounded corners and shadow via tk widget config (ttk doesn't support natively, so use tk.Button for extra polish if desired)
+        # Progress bars: rounded, gradient, icon at end
+        self.style.layout("Rounded.Horizontal.TProgressbar",
+            [('Horizontal.Progressbar.trough', {'children': [
+                ('Horizontal.Progressbar.pbar', {'side': 'left', 'sticky': 'ns'}),
+                ('Horizontal.Progressbar.label', {'sticky': ''})], 'sticky': 'nswe'})])
+        self.style.configure("Rounded.Horizontal.TProgressbar", thickness=22, background="#4fc3f7", troughcolor="#e3eaf0", borderwidth=0)
+        self.style.configure("Green.Horizontal.TProgressbar", thickness=22, background="#66bb6a", troughcolor="#e3eaf0", borderwidth=0)
+        self.style.configure("Red.Horizontal.TProgressbar", thickness=22, background="#ef5350", troughcolor="#e3eaf0", borderwidth=0)
+        self.style.configure("Yellow.Horizontal.TProgressbar", thickness=22, background="#ffd54f", troughcolor="#e3eaf0", borderwidth=0)
+        # Section/card style
+        self.style.configure("Card.TLabelframe", background="#f7f9fa", borderwidth=0, relief="flat", font=subheader_font)
+        self.style.configure("Card.TLabelframe.Label", background="#f7f9fa", foreground="#00529B", font=subheader_font)
         
-        self.style.configure("TProgressbar", thickness=20, background="#0078D4")
-        self.style.configure("Green.Horizontal.TProgressbar", background="green")
-        self.style.configure("Red.Horizontal.TProgressbar", background="red")
-        self.style.configure("Yellow.Horizontal.TProgressbar", background="orange")
-
         self.setup_keyboard_shortcuts()
         self.setup_ui()
 
@@ -197,52 +217,56 @@ Game Tips:
 
     def setup_ui(self):
         # Main Frame
-        main_frame = ttk.Frame(self.root, padding="20", style="TFrame") # Increased padding
+        main_frame = ttk.Frame(self.root, padding="32 32 32 32", style="Background.TFrame") # More padding
         main_frame.grid(row=0, column=0, sticky="nsew")
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
         main_frame.configure(style="Background.TFrame")
-        self.style.configure("Background.TFrame", background="#f0f0f0")
+        self.style.configure("Background.TFrame", background="#f7f9fa")
 
         # Status Display with Progress Bars
-        self.status_frame = ttk.LabelFrame(main_frame, text="Business Status", padding="15")
-        self.status_frame.grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 20)) # Increased padding
+        self.status_frame = ttk.LabelFrame(main_frame, text="Business Status", padding="20 20 20 20", style="Card.TLabelframe")
+        self.status_frame.grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 28))
 
         # Money and Reputation Progress Bars
         money_frame = ttk.Frame(self.status_frame, style="Background.TFrame")
-        money_frame.pack(fill="x", pady=5)
-        ttk.Label(money_frame, text="Money:", font=("Segoe UI", 11, "bold")).pack(side="left", padx=(0,5))
+        money_frame.pack(fill="x", pady=10)
+        ttk.Label(money_frame, text="Money:", style="SubHeader.TLabel").pack(side="left", padx=(0,8))
         self.money_progress = ttk.Progressbar(money_frame, length=250, mode='determinate', style="Green.Horizontal.TProgressbar")
-        self.money_progress.pack(side="left", padx=5, fill="x", expand=True)
-        self.money_label = ttk.Label(money_frame, text="$0", font=("Segoe UI", 11, "bold"))
-        self.money_label.pack(side="left", padx=(5,0))
+        self.money_progress.pack(side="left", padx=8, fill="x", expand=True)
+        self.money_icon = ttk.Label(money_frame, text="💰", style="Light.TLabel")
+        self.money_icon.pack(side="left", padx=(8,0))
+        self.money_label = ttk.Label(money_frame, text="$0", style="SubHeader.TLabel")
+        self.money_label.pack(side="left", padx=(8,0))
 
         rep_frame = ttk.Frame(self.status_frame, style="Background.TFrame")
-        rep_frame.pack(fill="x", pady=5)
-        ttk.Label(rep_frame, text="Reputation:", font=("Segoe UI", 11, "bold")).pack(side="left", padx=(0,5))
-        self.rep_progress = ttk.Progressbar(rep_frame, length=250, mode='determinate', style="Green.Horizontal.TProgressbar")
-        self.rep_progress.pack(side="left", padx=5, fill="x", expand=True)
-        self.rep_label = ttk.Label(rep_frame, text="0", font=("Segoe UI", 11, "bold"))
-        self.rep_label.pack(side="left", padx=(5,0))
+        rep_frame.pack(fill="x", pady=10)
+        ttk.Label(rep_frame, text="Reputation:", style="SubHeader.TLabel").pack(side="left", padx=(0,8))
+        self.rep_progress = ttk.Progressbar(rep_frame, length=250, mode='determinate', style="Yellow.Horizontal.TProgressbar")
+        self.rep_progress.pack(side="left", padx=8, fill="x", expand=True)
+        self.rep_icon = ttk.Label(rep_frame, text="⭐", style="Light.TLabel")
+        self.rep_icon.pack(side="left", padx=(8,0))
+        self.rep_label = ttk.Label(rep_frame, text="0", style="SubHeader.TLabel")
+        self.rep_label.pack(side="left", padx=(8,0))
 
         # Inventory Display (Improved with labels and a frame)
         inventory_outer_frame = ttk.Frame(self.status_frame, style="Background.TFrame")
-        inventory_outer_frame.pack(pady=10, fill="x")
+        inventory_outer_frame.pack(pady=16, fill="x")
         
-        ttk.Label(inventory_outer_frame, text="Current Day & Inventory:", font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0,5))
+        ttk.Label(inventory_outer_frame, text="Current Day & Inventory:", style="SubHeader.TLabel").pack(anchor="w", pady=(0,8))
         
-        self.inventory_text_frame = ttk.Frame(inventory_outer_frame, borderwidth=1, relief="sunken", style="TFrame")
-        self.inventory_text_frame.pack(fill="both", expand=True, padx=5, pady=5)
+        self.inventory_text_frame = ttk.Frame(inventory_outer_frame, borderwidth=1, relief="groove", style="TFrame")
+        self.inventory_text_frame.pack(fill="both", expand=True, padx=8, pady=8)
         
-        self.inventory_text = tk.Text(self.inventory_text_frame, height=7, width=45, font=("Consolas", 10), 
+        self.inventory_text = tk.Text(self.inventory_text_frame, height=7, width=45, font=("Consolas", 11), 
                                       bg="#ffffff", fg="#333333", relief="flat", borderwidth=0,
-                                      padx=10, pady=10) # Increased height and padding
+                                      padx=14, pady=14) # Increased height and padding
         self.inventory_text.pack(fill="both", expand=True)
         self.inventory_text.config(state='disabled')
 
         # Action Buttons Frame with Tooltips
-        actions_frame = ttk.LabelFrame(main_frame, text="Game Actions", padding="15")
-        actions_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=10)
+        actions_frame = ttk.LabelFrame(main_frame, text="Game Actions", padding="20 20 20 20", style="Card.TLabelframe")
+        actions_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=18)
 
         # Define actions and their commands
         # Upgrades and Research will use data from config
@@ -260,8 +284,8 @@ Game Tips:
 
         row, col = 0, 0
         for i, action_spec in enumerate(action_definitions):
-            btn = ttk.Button(actions_frame, text=action_spec["text"], command=action_spec["command"])
-            btn.grid(row=row, column=col, padx=5, pady=5, sticky="ew")
+            btn = ttk.Button(actions_frame, text=action_spec["text"], command=action_spec["command"], style="Modern.TButton")
+            btn.grid(row=row, column=col, padx=14, pady=10, sticky="ew")
             ToolTip(btn, action_spec["tooltip"])
             col += 1
             if col > 1:
@@ -276,8 +300,8 @@ Game Tips:
             map_btn_row = row 
             map_btn_col = col
 
-        map_btn = ttk.Button(actions_frame, text="Show Map", command=self.show_business_map)
-        map_btn.grid(row=map_btn_row, column=map_btn_col, padx=5, pady=5, sticky="ew")
+        map_btn = ttk.Button(actions_frame, text="Show Map", command=self.show_business_map, style="Modern.TButton")
+        map_btn.grid(row=map_btn_row, column=map_btn_col, padx=14, pady=10, sticky="ew")
         ToolTip(map_btn, "View business layout (F2)")
 
         # Configure grid weights
