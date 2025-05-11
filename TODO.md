@@ -101,8 +101,10 @@
 
 ## Quality of Life Enhancements
 - [ ] **"Buy Max" for Supplies**
-  - [ ] Add a "Buy Max" button to the buy supplies dialog.
-  - [ ] Calculate max affordable and storable quantity.
+  - [x] Add a "Buy Max" button to the buy supplies dialog (GUI).
+  - [x] Implement calculation for max affordable/storable quantity (GUI).
+  - [x] Add "max" input option for amount in CLI.
+  - [x] Implement calculation for "max" in controller for CLI.
 - [ ] **"Work/Rest Again" Quick Action**
   - [ ] After work/rest, offer an option to repeat the action immediately.
 - [ ] **Keyboard Shortcuts in Dialogs**

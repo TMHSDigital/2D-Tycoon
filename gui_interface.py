@@ -334,7 +334,7 @@ Game Tips:
     def buy_supplies(self):
         dialog = tk.Toplevel(self.root)
         dialog.title("Buy Supplies")
-        dialog.geometry("350x300") # Adjusted size
+        dialog.geometry("380x350") # Adjusted size for new button
         dialog.transient(self.root)
         dialog.grab_set()
         dialog.configure(bg="#f0f0f0")
@@ -354,55 +354,102 @@ Game Tips:
         amount_var = tk.StringVar()
         
         ttk.Label(main_dialog_frame, text="Select supply type:", style="Dialog.TLabel").pack(pady=(0,5), anchor="w")
-        supply_combo = ttk.Combobox(main_dialog_frame, textvariable=supply_var, style="Dialog.TCombobox", width=25)
-        supply_combo['values'] = ['Basic Supplies', 'Premium Supplies', 'Equipment']
+        supply_combo = ttk.Combobox(main_dialog_frame, textvariable=supply_var, style="Dialog.TCombobox", width=30, state="readonly")
+        supply_combo['values'] = [s.replace('_',' ').title() for s in config.SUPPLY_PRICES.keys()]
         supply_combo.pack(pady=5, fill="x")
         
-        ttk.Label(main_dialog_frame, text="Amount:", style="Dialog.TLabel").pack(pady=(10,5), anchor="w")
-        amount_entry = ttk.Entry(main_dialog_frame, textvariable=amount_var, style="Dialog.TEntry", width=27)
-        amount_entry.pack(pady=5, fill="x")
+        amount_frame = ttk.Frame(main_dialog_frame, style="Dialog.TFrame")
+        amount_frame.pack(fill="x", pady=(10,0))
+
+        ttk.Label(amount_frame, text="Amount:", style="Dialog.TLabel").pack(side=tk.LEFT, anchor="w")
+        amount_entry = ttk.Entry(amount_frame, textvariable=amount_var, style="Dialog.TEntry", width=10)
+        amount_entry.pack(side=tk.LEFT, padx=(5,10), fill="x", expand=True)
+
+        def calculate_and_set_max(*args):
+            selected_supply_display = supply_var.get()
+            if not selected_supply_display:
+                self.show_message("Please select a supply type first.", "warning")
+                return
+
+            supply_type_key = selected_supply_display.lower().replace(' ', '_')
+            
+            if supply_type_key not in self.game.prices:
+                self.show_message("Invalid supply type selected for max calculation.", "error")
+                return
+
+            price_per_unit = self.game.prices[supply_type_key]
+            if price_per_unit <= 0: # Avoid division by zero
+                 amount_var.set("0")
+                 update_price() # Update total cost to $0
+                 return
+
+            max_affordable = self.game.money // price_per_unit
+            
+            current_storage_used = sum(self.game.inventory.values())
+            available_storage = self.game.storage_capacity - current_storage_used
+            max_storable = max(0, available_storage)
+            
+            actual_max = min(max_affordable, max_storable)
+            amount_var.set(str(actual_max))
+            update_price() # Ensure total cost updates after setting max
+
+        buy_max_button = ttk.Button(amount_frame, text="Buy Max", command=calculate_and_set_max, style="Dialog.TButton")
+        buy_max_button.pack(side=tk.LEFT, padx=5)
         
-        price_label = ttk.Label(main_dialog_frame, text="Total Cost: $0", style="Dialog.TLabel") # Initial text
+        price_label = ttk.Label(main_dialog_frame, text="Total Cost: $0", style="Dialog.TLabel")
         price_label.pack(pady=(10,5))
         
         def update_price(*args):
-            supply_type = supply_var.get().lower().replace(' ', '_')
+            supply_type_display = supply_var.get()
+            supply_type_key = supply_type_display.lower().replace(' ', '_')
             try:
                 amount = int(amount_var.get() or 0)
-                if supply_type in self.game.prices:
-                    total = amount * self.game.prices[supply_type]
+                if supply_type_key in self.game.prices:
+                    total = amount * self.game.prices[supply_type_key]
                     price_label['text'] = f"Total Cost: ${total}"
+                else:
+                    price_label['text'] = "Total Cost: $--"
             except ValueError:
                 price_label['text'] = "Enter a valid amount"
         
-        supply_var.trace('w', update_price)
-        amount_var.trace('w', update_price)
+        supply_var.trace_add('write', update_price) # Use trace_add
+        amount_var.trace_add('write', update_price) # Use trace_add
+        if supply_combo['values']:
+            supply_combo.current(0) # Select first item by default and trigger update_price
         
         def handle_purchase():
-            supply_type = supply_var.get().lower().replace(' ', '_')
+            # ... (existing handle_purchase logic, ensure it uses supply_type_key from supply_var.get().lower().replace...)
+            supply_type_key = supply_var.get().lower().replace(' ', '_')
             try:
                 amount = int(amount_var.get())
-                if supply_type not in self.game.prices:
-                    messagebox.showerror("Error", "Please select a valid supply type")
+                if not supply_type_key or supply_type_key not in self.game.prices:
+                    messagebox.showerror("Error", "Please select a valid supply type.")
                     return
                 
-                cost = amount * self.game.prices[supply_type]
-                if cost > self.game.money:
-                    messagebox.showerror("Error", "Not enough money!")
-                    return
-                
-                current_total = sum(self.game.inventory.values())
-                if current_total + amount > self.game.storage_capacity:
-                    messagebox.showerror("Error", "Not enough storage space!")
-                    return
-                
-                self.game.money -= cost
-                self.game.inventory[supply_type] += amount
-                messagebox.showinfo("Success", f"Bought {amount} {supply_type.replace('_', ' ')} for ${cost}")
-                self.update_status()
-                dialog.destroy()
+                # GameState.buy_supplies handles the logic for cost, money, storage checks
+                if self.game.buy_supplies(supply_type_key, amount):
+                    cost = amount * self.game.prices[supply_type_key] # For display message only
+                    messagebox.showinfo("Success", f"Bought {amount} {supply_type_key.replace('_',' ').title()} for ${cost}.")
+                    self.update_status()
+                    dialog.destroy()
+                else:
+                    # More specific error based on why it might have failed
+                    price_per_unit = self.game.prices.get(supply_type_key, 0)
+                    cost = amount * price_per_unit if price_per_unit > 0 else float('inf')
+                    current_storage_used = sum(self.game.inventory.values())
+                    available_storage = self.game.storage_capacity - current_storage_used
+
+                    if self.game.money < cost and available_storage < amount:
+                        messagebox.showerror("Error", "Not enough money AND storage space!")
+                    elif self.game.money < cost:
+                        messagebox.showerror("Error", "Not enough money!")
+                    elif available_storage < amount:
+                        messagebox.showerror("Error", "Not enough storage space!")
+                    else:
+                        messagebox.showerror("Error", "Could not complete purchase. Unknown reason.")
+
             except ValueError:
-                messagebox.showerror("Error", "Please enter a valid amount")
+                messagebox.showerror("Error", "Please enter a valid amount for supplies.")
         
         button_frame = ttk.Frame(main_dialog_frame, style="Dialog.TFrame")
         button_frame.pack(pady=(15,0), fill="x")

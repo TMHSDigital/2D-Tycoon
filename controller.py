@@ -114,36 +114,56 @@ class GameController:
     
     def handle_buy_supplies(self) -> None:
         """Handle the buy supplies action."""
-        self.view.display_buy_supplies_menu(self.game_state)
+        self.view.display_buy_supplies_menu(self.game_state) # CLIView now hints about 'max'
         
-        supply_choice = self.view.get_input("Choose supply type (1-4): ", ["1", "2", "3", "4"])
-        if supply_choice == "4":
+        # In CLI, supply_choice is a number string corresponding to index + 1
+        # The list of supply keys is ordered from config.SUPPLY_PRICES.keys()
+        supply_keys_ordered = list(config.SUPPLY_PRICES.keys())
+        back_option_index_str = str(len(supply_keys_ordered) + 1)
+        valid_supply_choices = [str(i+1) for i in range(len(supply_keys_ordered))] + [back_option_index_str]
+
+        choice_str = self.view.get_input(f"Choose supply type (1-{len(supply_keys_ordered)}) or {back_option_index_str} for Back: ", valid_supply_choices)
+        
+        if choice_str == back_option_index_str:
             return
             
-        supply_types = ["basic_supplies", "premium_supplies", "equipment"]
-        supply_type = supply_types[int(supply_choice) - 1]
+        supply_type = supply_keys_ordered[int(choice_str) - 1]
         
-        current_total = sum(self.game_state.inventory.values())
-        max_purchase = min(
-            self.game_state.storage_capacity - current_total,
-            self.game_state.money // config.prices[supply_type]
-        )
+        price_per_unit = self.game_state.prices.get(supply_type, 0)
+        if price_per_unit <= 0: # Should not happen if supply_type is valid
+            self.view.show_message("Selected supply has an invalid price.", "error")
+            return
+
+        current_total_inventory = sum(self.game_state.inventory.values())
+        max_affordable = self.game_state.money // price_per_unit
+        max_storable = self.game_state.storage_capacity - current_total_inventory
+        true_max_purchase = max(0, min(max_affordable, max_storable))
         
-        if max_purchase <= 0:
-            self.view.show_message("Not enough money or storage space!", "error")
+        if true_max_purchase <= 0:
+            self.view.show_message("Not enough money or storage space to buy any!", "error")
             return
             
-        amount = self.view.get_number_input(
-            f"How many {supply_type.replace('_', ' ')} would you like to buy? (0-{max_purchase}): ",
-            0, max_purchase
+        amount_input = self.view.get_number_input(
+            f"How many {supply_type.replace('_', ' ').title()} would you like to buy? (0-{true_max_purchase}, or 'max'): ",
+            0, true_max_purchase, allow_max_str=True
         )
         
-        if amount > 0:
-            cost = amount * config.prices[supply_type]
-            if self.game_state.buy_supplies(supply_type, amount):
-                self.view.show_message(f"Bought {amount} {supply_type.replace('_', ' ')} for ${cost}", "success")
+        amount_to_buy = 0
+        if amount_input == "max":
+            amount_to_buy = true_max_purchase
+        else:
+            amount_to_buy = int(amount_input) # Already validated by get_number_input if not 'max'
+
+        if amount_to_buy > 0:
+            if self.game_state.buy_supplies(supply_type, amount_to_buy):
+                cost = amount_to_buy * price_per_unit
+                self.view.show_message(f"Bought {amount_to_buy} {supply_type.replace('_', ' ').title()} for ${cost}", "success")
             else:
-                self.view.show_message("Failed to buy supplies.", "error")
+                # GameState.buy_supplies should ideally handle internal logic and return False if failed.
+                # This specific error might be redundant if GameState.buy_supplies is robust.
+                self.view.show_message("Failed to buy supplies (already checked money/storage).", "error") 
+        elif amount_input != "max": # Only show if they didn't type 0 and didn't type max (which might result in 0)
+             self.view.show_message("No supplies purchased.", "info")
     
     def handle_work(self) -> None:
         """Handle the work action."""

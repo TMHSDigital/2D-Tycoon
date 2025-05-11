@@ -32,8 +32,8 @@ class View(ABC):
         pass
     
     @abstractmethod
-    def get_number_input(self, prompt: str, min_val: int = 0, max_val: int = 1000) -> int:
-        """Get numeric input with range validation."""
+    def get_number_input(self, prompt: str, min_val: int = 0, max_val: int = 1000, allow_max_str: bool = False) -> Any:
+        """Get numeric input with range validation, optionally allowing 'max' string."""
         pass
     
     @abstractmethod
@@ -142,16 +142,19 @@ class CLIView(View):
                 return user_input
             print(f"\n{Fore.RED}Invalid input. Please try again.{Style.RESET_ALL}")
     
-    def get_number_input(self, prompt: str, min_val: int = 0, max_val: int = 1000) -> int:
-        """Get numeric input with range validation."""
+    def get_number_input(self, prompt: str, min_val: int = 0, max_val: int = 1000, allow_max_str: bool = False) -> Any:
+        """Get numeric input with range validation, optionally allowing 'max' string."""
         while True:
+            user_input = input(prompt).lower()
+            if allow_max_str and user_input == "max":
+                return "max"
             try:
-                value = int(input(prompt))
+                value = int(user_input)
                 if min_val <= value <= max_val:
                     return value
-                print(f"\n{Fore.RED}Please enter a number between {min_val} and {max_val}.{Style.RESET_ALL}")
+                print(f"\n{Fore.RED}Please enter a number between {min_val} and {max_val} (or 'max').{Style.RESET_ALL}")
             except ValueError:
-                print(f"\n{Fore.RED}Please enter a valid number.{Style.RESET_ALL}")
+                print(f"\n{Fore.RED}Please enter a valid number (or 'max').{Style.RESET_ALL}")
     
     def show_message(self, message: str, message_type: str = "info") -> None:
         """Show a message to the user."""
@@ -167,10 +170,12 @@ class CLIView(View):
     def display_buy_supplies_menu(self, game_state: Any) -> None:
         """Display menu for buying supplies."""
         print("\nAvailable supplies:")
-        print(f"[1] Basic Supplies (${game_state.prices['basic_supplies']})")
-        print(f"[2] Premium Supplies (${game_state.prices['premium_supplies']})")
-        print(f"[3] Equipment (${game_state.prices['equipment']})")
-        print("[4] Back")
+        for idx, key in enumerate(config.SUPPLY_PRICES.keys()):
+            name = key.replace('_',' ').title()
+            price = config.SUPPLY_PRICES[key]
+            print(f"[{idx+1}] {name} (${price})")
+        print(f"[{len(config.SUPPLY_PRICES) + 1}] Back")
+        print(f"{Fore.YELLOW}Hint: When asked for amount, you can type 'max' to buy the maximum possible.{Style.RESET_ALL}")
     
     def display_employee_menu(self, game_state: Any) -> None:
         """Display employee management menu."""
