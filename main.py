@@ -17,12 +17,16 @@ def main():
     # Check if GUI mode is requested
     if len(sys.argv) > 1 and sys.argv[1] == "--gui":
         # Use GUI interface
-        gui = TycoonGUI(game_state)
+        # Create controller first if GUI needs it for initialization or direct calls
+        controller = GameController(game_state, None) # Temporarily None for view, will be GUI
+        gui = TycoonGUI(game_state, controller) 
+        controller.view = gui # Assign GUI as the view for the controller
         gui.run()
     else:
         # Use CLI interface with MVC pattern
         view = CLIView()
         controller = GameController(game_state, view)
+        view.set_controller_reference(controller)
         controller.start_game()
 
 if __name__ == "__main__":

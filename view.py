@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 from colorama import Fore, Style
 
 class View(ABC):
@@ -40,6 +40,14 @@ class View(ABC):
         """Show a message to the user."""
         pass
 
+    @abstractmethod
+    def display_research_menu(self, research_projects: Dict[str, Any], 
+                              completed_research: List[str], 
+                              active_project_key: Optional[str],
+                              active_project_progress: int) -> Optional[str]:
+        """Display research options and return player's choice (project key) or None if back."""
+        pass
+
 
 class CLIView(View):
     """Command Line Interface View implementation."""
@@ -48,6 +56,11 @@ class CLIView(View):
         """Initialize the CLI View."""
         from pyfiglet import figlet_format
         self.figlet_format = figlet_format
+        self.game_controller_ref: Optional[Any] = None # To access event_manager.research_progress
+    
+    def set_controller_reference(self, controller: Any) -> None:
+        """Set a reference to the game controller for accessing EventManager state if needed by view."""
+        self.game_controller_ref = controller
     
     def display_welcome(self) -> None:
         """Display welcome message."""
@@ -80,6 +93,15 @@ class CLIView(View):
         if game_state.employees:
             print("\nEmployees:", len(game_state.employees))
         
+        # Display active research project
+        if game_state.active_research_project and self.game_controller_ref:
+            active_project_details = self.game_controller_ref.event_manager.research_projects.get(game_state.active_research_project)
+            if active_project_details:
+                progress = self.game_controller_ref.event_manager.research_progress
+                duration = active_project_details['duration']
+                progress_percent = (progress / duration) * 100 if duration > 0 else 0
+                print(f"{Fore.MAGENTA}Active Research: {active_project_details['name']} ({progress}/{duration} days - {progress_percent:.0f}%){Style.RESET_ALL}")
+
         print("="*60)
     
     def display_menu(self) -> None:
@@ -93,6 +115,7 @@ class CLIView(View):
         print("[6] Rest")
         print("[7] Save game")
         print("[8] Quit")
+        print("[9] Research & Development")
     
     def display_game_over(self, game_state: Any, is_win: bool) -> None:
         """Display game over screen."""
@@ -181,9 +204,44 @@ class CLIView(View):
     
     def display_market_message(self, message: str) -> None:
         """Display market trend message."""
-        if "booming" in message:
-            print(f"{Fore.GREEN}{message}{Style.RESET_ALL}")
-        elif "decline" in message:
-            print(f"{Fore.RED}{message}{Style.RESET_ALL}")
+        # Colorama codes are now expected to be part of the message from EventManager
+        print(message)
+
+    def display_research_menu(self, research_projects: Dict[str, Any], 
+                              completed_research: List[str], 
+                              active_project_key: Optional[str],
+                              active_project_progress: int) -> Optional[str]:
+        """Display research options and get player's choice."""
+        print(f"\n{Fore.CYAN}=== Research & Development ==={Style.RESET_ALL}")
+        if active_project_key:
+            active_project = research_projects[active_project_key]
+            progress_percent = (active_project_progress / active_project['duration']) * 100 if active_project['duration'] > 0 else 0
+            print(f"{Fore.YELLOW}Active Research: {active_project['name']} ({active_project_progress}/{active_project['duration']} days - {progress_percent:.0f}%){Style.RESET_ALL}")
         else:
-            print(message) 
+            print(f"{Fore.YELLOW}No active research project.{Style.RESET_ALL}")
+        
+        print("\nAvailable Projects:")
+        options = {}
+        option_idx = 1
+        for key, project in research_projects.items():
+            status = ""
+            if key in completed_research:
+                status = f"{Fore.GREEN}(Completed){Style.RESET_ALL}"
+            elif key == active_project_key:
+                status = f"{Fore.YELLOW}(In Progress){Style.RESET_ALL}"
+            else:
+                status = f"(Cost: ${project['cost']}, Duration: {project['duration']} days)"
+            
+            print(f"[{option_idx}] {project['name']} {status}")
+            if project.get('description'):
+                 print(f"    {Fore.CYAN}└─ Description: {project['description']}{Style.RESET_ALL}")
+            options[str(option_idx)] = key
+            option_idx += 1
+        
+        print(f"[{option_idx}] Back to main menu")
+        options[str(option_idx)] = None # For going back
+        
+        valid_choices = list(options.keys())
+        choice = self.get_input("Choose a research project to start or view, or go back: ", valid_choices)
+        
+        return options[choice] 

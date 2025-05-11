@@ -2,6 +2,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from business_map import BusinessMap
 from game_state import GameState
+from colorama import Fore, Style
+from typing import Optional, Any
 
 class ToolTip:
     def __init__(self, widget, text):
@@ -30,9 +32,10 @@ class ToolTip:
             self.tooltip = None
 
 class TycoonGUI:
-    def __init__(self, game_state: GameState):
-        """Initialize the GUI with a GameState instance."""
+    def __init__(self, game_state: GameState, controller: Optional[Any] = None):
+        """Initialize the GUI with a GameState instance and optional controller reference."""
         self.game = game_state
+        self.controller_ref = controller
         self.root = tk.Tk()
         self.root.title("Business Tycoon Adventure")
         self.root.geometry("900x700") # Increased window size
@@ -154,6 +157,31 @@ Game Tips:
         
         ttk.Button(main_dialog_frame, text="Close", command=dialog.destroy, style="Dialog.TButton").pack(pady=(10,0))
 
+    # Method to show generic messages, similar to CLIView
+    def show_message(self, message: str, message_type: str = "info") -> None:
+        """Show a message to the user using a messagebox."""
+        # Sanitize Colorama codes for GUI display
+        clean_message = message.replace(Fore.GREEN, "").replace(Fore.RED, "").replace(Fore.YELLOW, "").replace(Fore.CYAN, "").replace(Style.RESET_ALL, "")
+        
+        if message_type == "success":
+            messagebox.showinfo("Success", clean_message)
+        elif message_type == "error":
+            messagebox.showerror("Error", clean_message)
+        elif message_type == "warning":
+            messagebox.showwarning("Warning", clean_message)
+        else: # info and other types
+            messagebox.showinfo("Information", clean_message)
+
+    def display_market_message(self, message: str) -> None:
+        """Display market trend message (could be a status bar update or temp label in GUI)."""
+        # For now, use the generic show_message. Can be enhanced later.
+        # Sanitize Colorama codes for GUI display
+        clean_message = message.replace(Fore.GREEN, "").replace(Fore.RED, "").replace(Fore.YELLOW, "").replace(Style.RESET_ALL, "")
+        message_type = "info"
+        if "booming" in clean_message.lower(): message_type = "success"
+        if "decline" in clean_message.lower(): message_type = "error"
+        self.show_message(f"Market Update: {clean_message}", message_type)
+
     def setup_ui(self):
         # Main Frame
         main_frame = ttk.Frame(self.root, padding="20", style="TFrame") # Increased padding
@@ -224,15 +252,30 @@ Game Tips:
             ("Save Game", self.save_game),
             ("Quit", self.quit_game)
         ]
+        # Add Research button before Map button
+        actions.insert(6, ("Research", self.handle_research_dialog)) 
 
         for i, (text, command) in enumerate(actions):
             btn = ttk.Button(actions_frame, text=text, command=command)
             btn.grid(row=i // 2, column=i % 2, padx=5, pady=5, sticky="ew")
-            ToolTip(btn, tooltips[text])
+            # Update tooltips dictionary if new actions are added
+            if text in tooltips:
+                 ToolTip(btn, tooltips[text])
+            elif text == "Research":
+                ToolTip(btn, "Manage Research & Development projects")
 
-        # Add Map Button
+        # Adjust Map Button grid position if necessary based on new total number of actions
+        map_btn_row = len(actions) // 2
+        map_btn_col = len(actions) % 2
+        if map_btn_col == 0 and len(actions) % 2 !=0 : # if it would be the only button on a new row, put it on previous row, second column
+             map_btn_row -=1
+             map_btn_col =1
+        if len(actions) % 2 == 0: # If actions make full rows, map button starts a new row
+            map_btn_row = len(actions) // 2
+            map_btn_col = 0 
+
         map_btn = ttk.Button(actions_frame, text="Show Map", command=self.show_business_map)
-        map_btn.grid(row=4, column=1, padx=5, pady=5, sticky="ew")
+        map_btn.grid(row=map_btn_row, column=map_btn_col, padx=5, pady=5, sticky="ew")
         ToolTip(map_btn, "View business layout (F2)")
 
         # Configure grid weights
@@ -281,6 +324,16 @@ Game Tips:
              inventory_text_content += f"\nEmployees: {len(self.game.employees)}\n"
         if self.game.loan > 0:
             inventory_text_content += f"Loan: ${self.game.loan}\n"
+
+        # Add active research to inventory_text_content
+        if self.game.active_research_project and self.controller_ref:
+            event_manager = self.controller_ref.event_manager
+            active_project_details = event_manager.research_projects.get(self.game.active_research_project)
+            if active_project_details:
+                progress = event_manager.research_progress
+                duration = active_project_details['duration']
+                progress_percent = (progress / duration) * 100 if duration > 0 else 0
+                inventory_text_content += f"\nActive Research: {active_project_details['name']} ({progress}/{duration} - {progress_percent:.0f}%)\n"
 
         self.inventory_text.insert(1.0, inventory_text_content)
         self.inventory_text.config(state='disabled')
@@ -588,6 +641,106 @@ Game Tips:
         if messagebox.askyesno("Quit", "Do you want to save before quitting?"):
             self.save_game()
         self.root.destroy()
+
+    def handle_research_dialog(self):
+        """Open a dialog to manage research projects."""
+        if not self.controller_ref: # Should not happen if initialized correctly
+            self.show_message("Controller not available for research.", "error")
+            return
+
+        event_manager = self.controller_ref.event_manager
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Research & Development")
+        dialog.geometry("550x450") # Adjusted size for more info
+        dialog.transient(self.root)
+        dialog.grab_set()
+        dialog.configure(bg="#f0f0f0")
+
+        style = ttk.Style(dialog)
+        if "clam" in style.theme_names(): style.theme_use("clam")
+        style.configure("Dialog.TLabel", background="#f0f0f0", font=("Segoe UI", 10))
+        style.configure("Dialog.TButton", font=("Segoe UI", 10, "bold"), padding=5)
+        style.configure("Dialog.TLabelframe", background="#f0f0f0", font=("Segoe UI", 11, "bold"))
+        style.configure("Dialog.TLabelframe.Label", background="#f0f0f0", foreground="#00529B", font=("Segoe UI", 11, "bold"))
+        style.configure("Dialog.TFrame", background="#f0f0f0")
+
+        main_dialog_frame = ttk.Frame(dialog, padding=15, style="Dialog.TFrame")
+        main_dialog_frame.pack(fill="both", expand=True)
+
+        # Display Active Research
+        active_research_frame = ttk.LabelFrame(main_dialog_frame, text="Active Project", padding=10, style="Dialog.TLabelframe")
+        active_research_frame.pack(pady=10, fill="x")
+        if event_manager.active_research:
+            active_project = event_manager.research_projects[event_manager.active_research]
+            progress_percent = (event_manager.research_progress / active_project['duration']) * 100 if active_project['duration'] > 0 else 0
+            ttk.Label(active_research_frame, 
+                      text=f"{active_project['name']} ({event_manager.research_progress}/{active_project['duration']} days - {progress_percent:.0f}% complete)", 
+                      style="Dialog.TLabel", font=("Segoe UI", 10, "italic")).pack(anchor="w")
+        else:
+            ttk.Label(active_research_frame, text="No active research project.", style="Dialog.TLabel", font=("Segoe UI", 10, "italic")).pack(anchor="w")
+
+        # Available Projects List
+        projects_frame = ttk.LabelFrame(main_dialog_frame, text="Available Projects", padding=10, style="Dialog.TLabelframe")
+        projects_frame.pack(pady=10, fill="both", expand=True)
+
+        # Use a Canvas and Frame for scrollable list of projects
+        canvas = tk.Canvas(projects_frame, bg="#f0f0f0", highlightthickness=0)
+        scrollbar = ttk.Scrollbar(projects_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = ttk.Frame(canvas, style="Dialog.TFrame")
+
+        scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+
+        for key, project in event_manager.research_projects.items():
+            project_info_frame = ttk.Frame(scrollable_frame, padding=(0,0,0,10), style="Dialog.TFrame") # Padding at bottom of each item
+            project_info_frame.pack(fill="x")
+
+            status_text = ""
+            button_text = "Start Research"
+            button_state = tk.NORMAL
+
+            if key in self.game.completed_research:
+                status_text = "(Completed)"
+                button_state = tk.DISABLED
+            elif key == event_manager.active_research:
+                status_text = "(In Progress)"
+                button_state = tk.DISABLED
+            
+            ttk.Label(project_info_frame, text=f"{project['name']} {status_text}", style="Dialog.TLabel", font=("Segoe UI", 10, "bold")).pack(anchor="w")
+            ttk.Label(project_info_frame, text=f"Cost: ${project['cost']} | Duration: {project['duration']} days", style="Dialog.TLabel").pack(anchor="w")
+            # Display project description
+            if project.get('description'):
+                ttk.Label(project_info_frame, text=project['description'], style="Dialog.TLabel", wraplength=450, justify=tk.LEFT).pack(anchor="w", pady=(2,0))
+
+            def make_start_research_handler(p_key, p_cost, p_name, p_duration):
+                def handler():
+                    if event_manager.active_research is not None:
+                        self.show_message(f"Another research '{event_manager.research_projects[event_manager.active_research]['name']}' is already active.", "warning")
+                        return
+                    if self.game.money < p_cost:
+                        self.show_message(f"Not enough money to start '{p_name}'. Cost: ${p_cost}", "error")
+                        return
+                    
+                    self.game.money -= p_cost
+                    event_manager.active_research = p_key
+                    self.game.active_research_project = p_key
+                    event_manager.research_progress = 0
+                    self.show_message(f"Research started for '{p_name}'! It will take {p_duration} days.", "success")
+                    self.update_status() # Update main UI
+                    dialog.destroy() # Close research dialog
+                return handler
+
+            ttk.Button(project_info_frame, text=button_text, state=button_state,
+                       command=make_start_research_handler(key, project['cost'], project['name'], project['duration']), 
+                       style="Dialog.TButton").pack(anchor="e", pady=5)
+            ttk.Separator(scrollable_frame, orient='horizontal').pack(fill='x', pady=5)
+
+        ttk.Button(main_dialog_frame, text="Close", command=dialog.destroy, style="Dialog.TButton").pack(pady=(10,0))
 
     def run(self):
         self.root.mainloop() 

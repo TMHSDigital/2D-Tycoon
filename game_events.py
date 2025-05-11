@@ -10,9 +10,35 @@ class EventManager:
             {"name": "MegaCorp", "market_share": 0.4, "aggressive": True}
         ]
         self.research_projects = {
-            "efficient_storage": {"cost": 400, "duration": 5, "completed": False},
-            "smart_automation": {"cost": 600, "duration": 7, "completed": False},
-            "eco_friendly": {"cost": 300, "duration": 4, "completed": False}
+            "efficient_storage": {
+                "name": "Efficient Storage Solutions", 
+                "cost": 400, 
+                "duration": 5, 
+                "description": "Increases your total storage capacity by 75 units.",
+                "completed": False # Internal flag for EventManager, GameState.completed_research is canonical for player
+            },
+            "smart_automation": {
+                "name": "Smart Automation Systems", 
+                "cost": 600, 
+                "duration": 7, 
+                "description": "Boosts income from automated processes by an additional 10%.",
+                "completed": False
+            },
+            "eco_friendly": {
+                "name": "Eco-Friendly Practices", 
+                "cost": 300, 
+                "duration": 4, 
+                "description": "Improves public image, granting a permanent +10 reputation boost.",
+                "completed": False
+            },
+            # Example of a new research project we could add later
+            # "advanced_marketing": {
+            #     "name": "Advanced Marketing Campaigns",
+            #     "cost": 500,
+            #     "duration": 6,
+            #     "description": "Significantly reduces reputation loss from working and boosts passive reputation gain.",
+            #     "completed": False
+            # }
         }
         self.active_research = None
         self.research_progress = 0
