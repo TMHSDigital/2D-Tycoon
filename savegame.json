@@ -1,1 +1,1 @@
-{"money": 521, "reputation": 99, "day": 1, "inventory": {"basic_supplies": 10, "premium_supplies": 0, "equipment": 0}, "upgrades": {"automation": false, "marketing": 0, "storage": 0}, "employees": [], "loan": 0}
+{"money": 100, "reputation": 50, "day": 1, "inventory": {"basic_supplies": 0, "premium_supplies": 0, "equipment": 0}, "upgrades": {"automation": false, "marketing": 0, "storage": 0}, "employees": [], "loan": 0, "market_trend": 1.0, "current_market_demand": 1.0, "storage_capacity": 50, "active_research_project": null, "completed_research": [], "research_points": 0}
