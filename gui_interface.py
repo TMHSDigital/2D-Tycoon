@@ -273,7 +273,7 @@ Game Tips:
 
     def work(self):
         if sum(self.game.inventory.values()) > 0:
-            result = self.game.handle_work()
+            result = self.game.work()
             self.update_status()
             
             # Visual feedback for money earned
@@ -456,7 +456,7 @@ Game Tips:
         ttk.Button(dialog, text="Close", command=dialog.destroy).pack(pady=10)
 
     def rest(self):
-        self.game.handle_rest()
+        self.game.rest()
         self.update_status()
         
         # Visual feedback for reputation gain
