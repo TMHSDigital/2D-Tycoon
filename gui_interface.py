@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
 from business_map import BusinessMap
+from game_state import GameState
 
 class ToolTip:
     def __init__(self, widget, text):
@@ -29,8 +30,9 @@ class ToolTip:
             self.tooltip = None
 
 class TycoonGUI:
-    def __init__(self, game):
-        self.game = game
+    def __init__(self, game_state: GameState):
+        """Initialize the GUI with a GameState instance."""
+        self.game = game_state  # Keep the same attribute name for compatibility
         self.root = tk.Tk()
         self.root.title("Business Tycoon Adventure")
         self.root.geometry("800x600")
@@ -294,11 +296,12 @@ Game Tips:
         dialog.grab_set()
         
         ttk.Label(dialog, text=f"Current employees: {len(self.game.employees)}").pack(pady=5)
-        ttk.Label(dialog, text=f"Daily cost per employee: $200").pack(pady=5)
+        ttk.Label(dialog, text=f"Daily cost per employee: $150").pack(pady=5)
+        ttk.Label(dialog, text=f"Productivity boost per employee: 40%").pack(pady=5)
         
         def hire():
-            if self.game.money >= 200:
-                self.game.employees.append({"salary": 200})
+            if self.game.money >= 150:
+                self.game.employees.append({"salary": 150})
                 messagebox.showinfo("Success", "New employee hired!")
                 self.update_status()
                 dialog.destroy()
@@ -314,7 +317,7 @@ Game Tips:
             else:
                 messagebox.showerror("Error", "No employees to fire!")
         
-        ttk.Button(dialog, text="Hire Employee ($200)", command=hire).pack(pady=5)
+        ttk.Button(dialog, text="Hire Employee ($150)", command=hire).pack(pady=5)
         ttk.Button(dialog, text="Fire Employee", command=fire).pack(pady=5)
         ttk.Button(dialog, text="Close", command=dialog.destroy).pack(pady=10)
 
@@ -326,9 +329,9 @@ Game Tips:
         dialog.grab_set()
         
         upgrades = {
-            "automation": {"cost": 500, "name": "Automation System", "description": "Increases daily income"},
-            "marketing": {"cost": 300, "name": "Marketing Campaign", "description": "Improves reputation gain"},
-            "storage": {"cost": 200, "name": "Storage Expansion", "description": "Increases storage capacity"}
+            "automation": {"cost": 400, "name": "Automation System", "description": "Increases daily income by 50%"},
+            "marketing": {"cost": 250, "name": "Marketing Campaign", "description": "Improves reputation gain and reduces loss"},
+            "storage": {"cost": 150, "name": "Storage Expansion", "description": "Increases storage capacity by 50 units"}
         }
         
         for upgrade_key, upgrade_info in upgrades.items():
@@ -378,12 +381,36 @@ Game Tips:
     def handle_loans(self):
         dialog = tk.Toplevel(self.root)
         dialog.title("Manage Loans")
-        dialog.geometry("300x250")
+        dialog.geometry("300x300")
         dialog.transient(self.root)
         dialog.grab_set()
         
         ttk.Label(dialog, text=f"Current loan: ${self.game.loan}").pack(pady=5)
-        ttk.Label(dialog, text=f"Interest rate: {self.game.loan_interest * 100}%").pack(pady=5)
+        ttk.Label(dialog, text=f"Annual interest rate: {self.game.loan_interest * 100}%").pack(pady=5)
+        daily_interest = self.game.loan_interest / 365
+        ttk.Label(dialog, text=f"(Daily rate: {daily_interest:.6f}%)").pack(pady=2)
+        
+        if self.game.loan > 0:
+            daily_cost = int(self.game.loan * daily_interest)
+            ttk.Label(dialog, text=f"Daily interest cost: ${daily_cost}").pack(pady=5)
+        
+        # Calculate income potential
+        income_potential = 0
+        if sum(self.game.inventory.values()) > 0:
+            base_income = 60  # Average of random 40-80
+            automation_bonus = 1.5 if self.game.upgrades["automation"] else 1.0
+            employee_bonus = 1 + (len(self.game.employees) * 0.2)
+            income_potential = int(base_income * automation_bonus * employee_bonus)
+        
+        # Calculate safe maximum loan
+        max_loan = 1000 - self.game.loan
+        safe_max_loan = min(max_loan, income_potential * 10)
+        
+        if income_potential > 0:
+            recommendation_text = f"Recommended max loan: ${safe_max_loan}"
+            if safe_max_loan < max_loan:
+                recommendation_text += " (based on income)"
+            ttk.Label(dialog, text=recommendation_text, foreground="blue").pack(pady=5)
         
         amount_var = tk.StringVar()
         ttk.Label(dialog, text="Amount:").pack(pady=5)
@@ -395,6 +422,11 @@ Game Tips:
                 amount = int(amount_var.get())
                 max_loan = 1000 - self.game.loan
                 if amount <= max_loan:
+                    if income_potential > 0 and amount > safe_max_loan:
+                        if not messagebox.askyesno("Warning", 
+                                                 f"This loan exceeds the recommended amount based on your income.\nAre you sure you want to proceed?"):
+                            return
+                    
                     self.game.loan += amount
                     self.game.money += amount
                     messagebox.showinfo("Success", f"Loan of ${amount} received!")
