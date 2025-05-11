@@ -83,7 +83,8 @@ Game Tips:
         dialog.grab_set()
         
         # Create map instance with current game state
-        map_instance = BusinessMap({
+        # Convert GameState object to a dictionary for BusinessMap
+        game_state_dict = {
             'day': self.game.day,
             'money': self.game.money,
             'reputation': self.game.reputation,
@@ -92,7 +93,8 @@ Game Tips:
             'storage_capacity': self.game.storage_capacity,
             'employees': self.game.employees,
             'upgrades': self.game.upgrades
-        })
+        }
+        map_instance = BusinessMap(game_state_dict)
         
         # Display the map
         map_label = ttk.Label(dialog, text=map_instance.get_map_with_status(), 
@@ -300,8 +302,7 @@ Game Tips:
         ttk.Label(dialog, text=f"Productivity boost per employee: 40%").pack(pady=5)
         
         def hire():
-            if self.game.money >= 150:
-                self.game.employees.append({"salary": 150})
+            if self.game.hire_employee():
                 messagebox.showinfo("Success", "New employee hired!")
                 self.update_status()
                 dialog.destroy()
@@ -309,8 +310,7 @@ Game Tips:
                 messagebox.showerror("Error", "Not enough money to hire!")
         
         def fire():
-            if self.game.employees:
-                self.game.employees.pop()
+            if self.game.fire_employee():
                 messagebox.showinfo("Notice", "Employee fired.")
                 self.update_status()
                 dialog.destroy()
@@ -350,27 +350,18 @@ Game Tips:
             
             def make_upgrade_handler(key, cost):
                 def handler():
-                    if self.game.money >= cost:
-                        if isinstance(self.game.upgrades[key], bool):
-                            if not self.game.upgrades[key]:
-                                self.game.money -= cost
-                                self.game.upgrades[key] = True
-                                messagebox.showinfo("Success", f"{upgrades[key]['name']} purchased!")
-                                self.update_status()
-                                dialog.destroy()
-                            else:
-                                messagebox.showinfo("Notice", "Already purchased!")
-                        else:
-                            if self.game.upgrades[key] < 3:  # Max level 3
-                                self.game.money -= cost
-                                self.game.upgrades[key] += 1
-                                messagebox.showinfo("Success", f"{upgrades[key]['name']} upgraded to level {self.game.upgrades[key]}!")
-                                self.update_status()
-                                dialog.destroy()
-                            else:
-                                messagebox.showinfo("Notice", "Maximum level reached!")
+                    if self.game.purchase_upgrade(key):
+                        messagebox.showinfo("Success", f"{upgrades[key]['name']} purchased!")
+                        self.update_status()
+                        dialog.destroy()
                     else:
-                        messagebox.showerror("Error", "Not enough money!")
+                        # Check why it failed
+                        if isinstance(self.game.upgrades[key], bool) and self.game.upgrades[key]:
+                            messagebox.showinfo("Notice", "Already purchased!")
+                        elif not isinstance(self.game.upgrades[key], bool) and self.game.upgrades[key] >= 3:
+                            messagebox.showinfo("Notice", "Maximum level reached!")
+                        else:
+                            messagebox.showerror("Error", "Not enough money!")
                 return handler
             
             ttk.Button(frame, text="Purchase", 
@@ -399,12 +390,12 @@ Game Tips:
         if sum(self.game.inventory.values()) > 0:
             base_income = 60  # Average of random 40-80
             automation_bonus = 1.5 if self.game.upgrades["automation"] else 1.0
-            employee_bonus = 1 + (len(self.game.employees) * 0.2)
+            employee_bonus = 1 + (len(self.game.employees) * 0.4)  # Updated to 0.4 to match new bonus
             income_potential = int(base_income * automation_bonus * employee_bonus)
         
         # Calculate safe maximum loan
+        safe_max_loan = self.game.get_safe_loan_amount()
         max_loan = 1000 - self.game.loan
-        safe_max_loan = min(max_loan, income_potential * 10)
         
         if income_potential > 0:
             recommendation_text = f"Recommended max loan: ${safe_max_loan}"
@@ -420,15 +411,13 @@ Game Tips:
         def take_loan():
             try:
                 amount = int(amount_var.get())
-                max_loan = 1000 - self.game.loan
-                if amount <= max_loan:
-                    if income_potential > 0 and amount > safe_max_loan:
-                        if not messagebox.askyesno("Warning", 
-                                                 f"This loan exceeds the recommended amount based on your income.\nAre you sure you want to proceed?"):
-                            return
-                    
-                    self.game.loan += amount
-                    self.game.money += amount
+                # Warn if amount exceeds recommended
+                if income_potential > 0 and amount > safe_max_loan:
+                    if not messagebox.askyesno("Warning", 
+                                            f"This loan exceeds the recommended amount based on your income.\nAre you sure you want to proceed?"):
+                        return
+                
+                if self.game.take_loan(amount):
                     messagebox.showinfo("Success", f"Loan of ${amount} received!")
                     self.update_status()
                     dialog.destroy()
@@ -440,9 +429,7 @@ Game Tips:
         def pay_loan():
             try:
                 amount = int(amount_var.get())
-                if amount <= self.game.money and amount <= self.game.loan:
-                    self.game.loan -= amount
-                    self.game.money -= amount
+                if self.game.repay_loan(amount):
                     messagebox.showinfo("Success", f"Paid ${amount} towards loan!")
                     self.update_status()
                     dialog.destroy()
@@ -466,7 +453,7 @@ Game Tips:
         messagebox.showinfo("Rest", "You rested and improved your reputation.")
 
     def save_game(self):
-        self.game.save_game()
+        result = self.game.save_game()
         messagebox.showinfo("Save Game", "Game saved successfully!")
 
     def quit_game(self):
