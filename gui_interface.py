@@ -50,24 +50,48 @@ class TycoonGUI:
         elif "alt" in available_themes:
             self.style.theme_use("alt")
         # Modern font and color palette
-        base_font = "Segoe UI 11"
-        header_font = "Segoe UI 14 bold"
-        subheader_font = "Segoe UI 12 bold"
-        light_font = "Segoe UI 10"
+        base_font_tuple = ("Segoe UI", 11)
+        header_font_tuple = ("Segoe UI", 14, "bold")
+        subheader_font_tuple = ("Segoe UI", 12, "bold")
+        light_font_tuple = ("Segoe UI", 10, "normal")
+
+        # For ttk.Style, use string format with braces for multi-word font names
+        base_font_style = "{Segoe UI} 11"
+        header_font_style = "{Segoe UI} 14 bold"
+        subheader_font_style = "{Segoe UI} 12 bold"
+        light_font_style = "{Segoe UI} 10"
+
+        # Fallback for direct widget font assignment if Segoe UI is not available
+        # This is mostly for tk.Text or if a style is not applied to a ttk widget for some reason.
+        self.default_font_widget = base_font_tuple 
+        try:
+            # Test if Segoe UI is available by trying to use it
+            # This is a bit of a hack, a better way would be to use font.families()
+            # but for simplicity and given the context:
+            temp_label = tk.Label(self.root, font=base_font_tuple)
+            temp_label.destroy()
+        except tk.TclError:
+            # Fallback to Arial if Segoe UI causes an error
+            base_font_style = "Arial 11"
+            header_font_style = "Arial 14 bold"
+            subheader_font_style = "Arial 12 bold"
+            light_font_style = "Arial 10"
+            self.default_font_widget = ("Arial", 11)
+
         # Fallbacks for non-Windows
         try:
-            self.root.option_add("*Font", base_font)
+            self.root.option_add("*Font", base_font_style) # For general tk widgets not using ttk styles
         except:
             self.root.option_add("*Font", "Arial 11")
         # Backgrounds
         self.style.configure("TFrame", background="#f7f9fa")
         self.style.configure("Background.TFrame", background="#f7f9fa")
-        self.style.configure("TLabel", background="#f7f9fa", foreground="#222", font=base_font)
-        self.style.configure("Header.TLabel", background="#f7f9fa", foreground="#00529B", font=header_font)
-        self.style.configure("SubHeader.TLabel", background="#f7f9fa", foreground="#0078D4", font=subheader_font)
-        self.style.configure("Light.TLabel", background="#f7f9fa", foreground="#666", font=light_font)
+        self.style.configure("TLabel", background="#f7f9fa", foreground="#222", font=base_font_style)
+        self.style.configure("Header.TLabel", background="#f7f9fa", foreground="#00529B", font=header_font_style)
+        self.style.configure("SubHeader.TLabel", background="#f7f9fa", foreground="#0078D4", font=subheader_font_style)
+        self.style.configure("Light.TLabel", background="#f7f9fa", foreground="#666", font=light_font_style)
         # Button style: rounded, soft blue, drop shadow, hover effect
-        self.style.configure("Modern.TButton", font=base_font, padding=12, relief="flat", borderwidth=0,
+        self.style.configure("Modern.TButton", font=base_font_style, padding=12, relief="flat", borderwidth=0,
             background="#2196F3", foreground="#fff")
         self.style.map("Modern.TButton",
             background=[('active', '#42a5f5'), ('!active', '#2196F3')],
@@ -83,8 +107,8 @@ class TycoonGUI:
         self.style.configure("Red.Horizontal.TProgressbar", thickness=22, background="#ef5350", troughcolor="#e3eaf0", borderwidth=0)
         self.style.configure("Yellow.Horizontal.TProgressbar", thickness=22, background="#ffd54f", troughcolor="#e3eaf0", borderwidth=0)
         # Section/card style
-        self.style.configure("Card.TLabelframe", background="#f7f9fa", borderwidth=0, relief="flat", font=subheader_font)
-        self.style.configure("Card.TLabelframe.Label", background="#f7f9fa", foreground="#00529B", font=subheader_font)
+        self.style.configure("Card.TLabelframe", background="#f7f9fa", borderwidth=0, relief="flat", font=subheader_font_style)
+        self.style.configure("Card.TLabelframe.Label", background="#f7f9fa", foreground="#00529B", font=subheader_font_style)
         
         self.setup_keyboard_shortcuts()
         self.setup_ui()
@@ -131,7 +155,7 @@ Game Tips:
         text_frame = ttk.Frame(main_dialog_frame, borderwidth=1, relief="sunken", style="Dialog.TFrame") # Added frame for text
         text_frame.pack(fill=tk.BOTH, expand=True, pady=(0,10))
 
-        text = tk.Text(text_frame, wrap=tk.WORD, padx=10, pady=10, font=("Segoe UI", 10), 
+        text = tk.Text(text_frame, wrap=tk.WORD, padx=10, pady=10, font=self.default_font_widget, 
                        bg="#ffffff", fg="#333333", relief="flat", borderwidth=0)
         text.insert("1.0", help_text)
         text.config(state="disabled")
@@ -216,16 +240,57 @@ Game Tips:
         self.show_message(f"Market Update: {clean_message}", message_type)
 
     def setup_ui(self):
-        # Main Frame
-        main_frame = ttk.Frame(self.root, padding="32 32 32 32", style="Background.TFrame") # More padding
-        main_frame.grid(row=0, column=0, sticky="nsew")
+        # Create a Canvas widget that will contain the main_frame and be scrollable
+        canvas = tk.Canvas(self.root, bg="#f7f9fa", highlightthickness=0)
+        canvas.grid(row=0, column=0, sticky="nsew")
+
+        # Create a vertical scrollbar
+        scrollbar = ttk.Scrollbar(self.root, orient="vertical", command=canvas.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+
+        # Configure the canvas to use the scrollbar
+        canvas.configure(yscrollcommand=scrollbar.set)
+
+        # Create the main_frame (this will be the scrollable content)
+        # Note: The main_frame is now a child of the canvas, not self.root directly for layout purposes, 
+        # but it's created with self.root as master to inherit styles, then placed in canvas.
+        # Actually, it's better to make main_frame a child of the canvas directly for create_window.
+        main_scrollable_frame = ttk.Frame(canvas, style="Background.TFrame")
+        
+        # Add the main_scrollable_frame to the canvas window
+        canvas.create_window((0, 0), window=main_scrollable_frame, anchor="nw")
+
+        # Update scrollregion when main_scrollable_frame size changes
+        def on_frame_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+        main_scrollable_frame.bind("<Configure>", on_frame_configure)
+        
+        # Enable mousewheel scrolling on the canvas (and its children)
+        def _on_mousewheel(event):
+            # Platform-dependent scrolling delta
+            if event.num == 4: # Linux scroll up
+                canvas.yview_scroll(-1, "units")
+            elif event.num == 5: # Linux scroll down
+                canvas.yview_scroll(1, "units")
+            else: # Windows/Mac scroll
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        # Bind mousewheel to canvas, root, and main_scrollable_frame to catch events
+        canvas.bind_all("<MouseWheel>", _on_mousewheel) # More general
+        canvas.bind_all("<Button-4>", _on_mousewheel) # For Linux scroll up
+        canvas.bind_all("<Button-5>", _on_mousewheel) # For Linux scroll down
+
+        # Configure root grid for canvas and scrollbar
         self.root.columnconfigure(0, weight=1)
         self.root.rowconfigure(0, weight=1)
-        main_frame.configure(style="Background.TFrame")
-        self.style.configure("Background.TFrame", background="#f7f9fa")
+
+        # --- All original main_frame content now goes into main_scrollable_frame --- 
+        # Main Frame (Original, now becoming main_scrollable_frame's content setup)
+        # Padding is now applied to internal elements if needed, or to main_scrollable_frame itself.
+        main_scrollable_frame.configure(padding="32 32 32 32")
 
         # Status Display with Progress Bars
-        self.status_frame = ttk.LabelFrame(main_frame, text="Business Status", padding="20 20 20 20", style="Card.TLabelframe")
+        self.status_frame = ttk.LabelFrame(main_scrollable_frame, text="Business Status", padding="20 20 20 20", style="Card.TLabelframe")
         self.status_frame.grid(row=0, column=0, columnspan=2, sticky="nsew", pady=(0, 28))
 
         # Money and Reputation Progress Bars
@@ -258,14 +323,14 @@ Game Tips:
         self.inventory_text_frame = ttk.Frame(inventory_outer_frame, borderwidth=1, relief="groove", style="TFrame")
         self.inventory_text_frame.pack(fill="both", expand=True, padx=8, pady=8)
         
-        self.inventory_text = tk.Text(self.inventory_text_frame, height=7, width=45, font=("Consolas", 11), 
+        self.inventory_text = tk.Text(self.inventory_text_frame, height=7, width=45, font=self.default_font_widget, 
                                       bg="#ffffff", fg="#333333", relief="flat", borderwidth=0,
                                       padx=14, pady=14) # Increased height and padding
         self.inventory_text.pack(fill="both", expand=True)
         self.inventory_text.config(state='disabled')
 
         # Action Buttons Frame with Tooltips
-        actions_frame = ttk.LabelFrame(main_frame, text="Game Actions", padding="20 20 20 20", style="Card.TLabelframe")
+        actions_frame = ttk.LabelFrame(main_scrollable_frame, text="Game Actions", padding="20 20 20 20", style="Card.TLabelframe")
         actions_frame.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=18)
 
         # Define actions and their commands
@@ -304,11 +369,10 @@ Game Tips:
         map_btn.grid(row=map_btn_row, column=map_btn_col, padx=14, pady=10, sticky="ew")
         ToolTip(map_btn, "View business layout (F2)")
 
-        # Configure grid weights
-        main_frame.columnconfigure(0, weight=1)
-        main_frame.columnconfigure(1, weight=1)
-        actions_frame.columnconfigure(0, weight=1)
-        actions_frame.columnconfigure(1, weight=1)
+        # Configure grid weights within main_scrollable_frame
+        main_scrollable_frame.columnconfigure(0, weight=1)
+        main_scrollable_frame.columnconfigure(1, weight=1)
+        # actions_frame grid weights are already set correctly for its internal columns
 
         # Update initial status
         self.update_status()
