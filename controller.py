@@ -16,6 +16,7 @@ class GameController:
         self.view = view
         self.event_manager = EventManager()
         self.game_state.market_trend = self.event_manager.market_trend
+        self.queued_next_day_action = None
     
     def start_game(self) -> None:
         """Start the game and handle main game loop."""
@@ -45,57 +46,88 @@ class GameController:
                 self.view.show_message(f"COMPETITOR NEWS: {message}", "warning")
                 self.game_state.apply_competitor_effect(effect)
             
-            self.view.display_menu()
-            choice = self.view.get_input("\nWhat would you like to do? (1-8): ", 
-                                     ["1", "2", "3", "4", "5", "6", "7", "8", "9"])
+            # --- QoL: Work/Rest Again logic --- 
+            # If a repeat action was queued, this variable will be set in the *previous* iteration.
+            # We need a way to carry this intent to the current iteration.
+            # Let's use a member variable in the controller for this.
+            # self.queued_next_day_action = None # Initialize in __init__
+
+            action_repeated_for_today = False
+            if hasattr(self, 'queued_next_day_action') and self.queued_next_day_action:
+                if self.queued_next_day_action == 'work':
+                    if sum(self.game_state.inventory.values()) > 0: # Re-check condition
+                        self.view.show_message(f"Automatically working for Day {self.game_state.day}...", "info", delay=0.2)
+                        if self.handle_work(): # handle_work now asks if we want to queue *another* repeat
+                            self.queued_next_day_action = 'work' # Re-queue if they said yes again
+                        else:
+                            self.queued_next_day_action = None
+                        action_repeated_for_today = True
+                    else:
+                        self.view.show_message("Cannot auto-work: No supplies!", "warning")
+                        self.queued_next_day_action = None
+                elif self.queued_next_day_action == 'rest':
+                    self.view.show_message(f"Automatically resting for Day {self.game_state.day}...", "info", delay=0.2)
+                    if self.handle_rest(): # handle_rest now asks if we want to queue *another* repeat
+                        self.queued_next_day_action = 'rest' # Re-queue
+                    else:
+                        self.queued_next_day_action = None
+                    action_repeated_for_today = True
+                # Important: Consume the queue for this day if action was attempted
+                if not action_repeated_for_today: # If condition failed (e.g. no supplies for work)
+                    self.queued_next_day_action = None
             
-            if choice == "1": self.handle_buy_supplies()
-            elif choice == "2": self.handle_work()
-            elif choice == "3": self.handle_employees()
-            elif choice == "4": self.handle_upgrades()
-            elif choice == "5": self.handle_loans()
-            elif choice == "6": self.handle_rest()
-            elif choice == "7": self.handle_save_game()
-            elif choice == "8": 
-                if self.handle_quit_game(): break
-            elif choice == "9": self.handle_start_research()
-            
-            if market_data.get("special_event"):
-                random_event_details = self.event_manager.get_random_event()
-                event_type = random_event_details.get("type", "none")
+            if not action_repeated_for_today and not self.game_state.is_game_over():
+                self.view.display_menu()
+                choice = self.view.get_input("\nWhat would you like to do? (1-9): ", 
+                                         ["1", "2", "3", "4", "5", "6", "7", "8", "9"])
                 
-                if event_type != "none":
-                    self.view.show_message(random_event_details["message"])
-                    self.game_state.apply_random_event_effect(random_event_details)
-            
-            interest = self.game_state.apply_daily_interest()
-            if interest > 0:
-                self.view.show_message(f"Daily loan interest: ${interest}", "error")
-            
-            self.game_state.advance_day()
-            
-            # === Research Progress Update ===
-            if self.event_manager.active_research:
-                research_status = self.event_manager.update_research() # This updates progress internally in EventManager
-                # Sync GameState's active_research_project, in case EventManager clears it on completion
-                self.game_state.active_research_project = self.event_manager.active_research 
+                if choice == "1": self.handle_buy_supplies()
+                elif choice == "2": 
+                    if self.handle_work(): self.queued_next_day_action = 'work' 
+                    else: self.queued_next_day_action = None
+                elif choice == "3": self.handle_employees()
+                elif choice == "4": self.handle_upgrades()
+                elif choice == "5": self.handle_loans()
+                elif choice == "6": 
+                    if self.handle_rest(): self.queued_next_day_action = 'rest'
+                    else: self.queued_next_day_action = None
+                elif choice == "7": self.handle_save_game()
+                elif choice == "8": 
+                    if self.handle_quit_game(): break
+                elif choice == "9": self.handle_start_research()
                 
-                if research_status.get("status") == "completed":
-                    completed_project_key = research_status.get("project")
-                    if completed_project_key:
-                        project_name = self.event_manager.research_projects_data[completed_project_key]['name']
-                        self.view.show_message(f"RESEARCH COMPLETE: '{project_name}'! Effects applied.", "success")
-                        self.game_state.apply_research_completion(completed_project_key)
-                        # EventManager.update_research already sets its active_research to None and progress to 0 on completion.
-                        self.game_state.active_research_project = None # Also clear in GameState
-                # Optionally, display in-progress message or update a persistent status
-                # else:
-                #    progress = research_status.get("progress",0)
-                #    current_project_name = self.event_manager.research_projects[self.event_manager.active_research]['name']
-                #    self.view.show_message(f"Research on {current_project_name} is now {progress:.0f}% complete.", "info")
-            # === Research Progress Update: End ===
-            
-            sleep(0.5)
+                # If any other action was chosen, clear any queued work/rest
+                if choice not in ['2', '6']:
+                    self.queued_next_day_action = None
+            elif self.game_state.is_game_over(): # If game over after a repeated action
+                 pass # Loop will terminate
+
+            # Daily processing happens AFTER the action for the current day
+            if not self.game_state.is_game_over():
+                if market_data.get("special_event"):
+                    random_event_details = self.event_manager.get_random_event()
+                    event_type = random_event_details.get("type", "none")
+                    if event_type != "none":
+                        self.view.show_message(random_event_details["message"])
+                        self.game_state.apply_random_event_effect(random_event_details)
+                
+                interest = self.game_state.apply_daily_interest()
+                if interest > 0:
+                    self.view.show_message(f"Daily loan interest: ${interest}", "error")
+                
+                self.game_state.advance_day()
+                
+                if self.event_manager.active_research:
+                    research_status = self.event_manager.update_research()
+                    self.game_state.active_research_project = self.event_manager.active_research 
+                    if research_status.get("status") == "completed":
+                        completed_project_key = research_status.get("project")
+                        if completed_project_key:
+                            project_name = self.event_manager.research_projects_data[completed_project_key]['name']
+                            self.view.show_message(f"RESEARCH COMPLETE: '{project_name}'! Effects applied.", "success")
+                            self.game_state.apply_research_completion(completed_project_key)
+                            self.game_state.active_research_project = None 
+                sleep(0.5)
         
         self.view.display_game_over(self.game_state, self.game_state.is_win())
 
@@ -165,17 +197,27 @@ class GameController:
         elif amount_input != "max": # Only show if they didn't type 0 and didn't type max (which might result in 0)
              self.view.show_message("No supplies purchased.", "info")
     
-    def handle_work(self) -> None:
+    def handle_work(self) -> bool: # Returns True if a repeat action was taken for the next day cycle
         """Handle the work action."""
         income = self.game_state.work()
+        next_day_action_taken = False
+
         if income > 0:
             self.view.show_message(f"You earned ${income}!", "success")
-            
-            employee_cost = len(self.game_state.employees) * 150
+            employee_cost = len(self.game_state.employees) * config.EMPLOYEE_DAILY_SALARY
             if employee_cost > 0:
                 self.view.show_message(f"Paid ${employee_cost} in employee salaries.", "warning")
+            
+            # Check if can work again (has supplies)
+            if sum(self.game_state.inventory.values()) > 0 and not self.game_state.is_game_over():
+                repeat_choice = self.view.get_input(f"Work again for Day {self.game_state.day + 1}? (y/n): ", ["y", "n"])
+                if repeat_choice == 'y':
+                    next_day_action_taken = True 
+                    # The actual work for next day will happen in the next loop iteration after daily processing
+                    self.view.show_message("Scheduled to work next day...", "info")
         else:
             self.view.show_message("You need supplies to work!", "error")
+        return next_day_action_taken
     
     def handle_employees(self) -> None:
         """Handle employee management."""
@@ -232,50 +274,100 @@ class GameController:
     
     def handle_loans(self) -> None:
         """Handle loan management."""
-        self.view.display_loan_menu(self.game_state)
+        self.view.display_loan_menu(self.game_state) # Displays current loan, rates, and safe loan recommendation
         
-        choice = self.view.get_input("Choose an action (1-3): ", ["1", "2", "3"])
+        choice = self.view.get_input("Choose an action (1-Take Loan, 2-Repay Loan, 3-Back): ", ["1", "2", "3"])
         
         if choice == "1":  # Take loan
-            max_loan = 1000 - self.game_state.loan
-            if max_loan <= 0:
+            max_loan_player_can_take = config.MAX_LOAN_TOTAL - self.game_state.loan
+            if max_loan_player_can_take <= 0:
                 self.view.show_message("You've reached your maximum loan limit!", "error")
                 return
                 
-            safe_loan = self.game_state.get_safe_loan_amount()
-            if safe_loan < max_loan:
-                self.view.show_message(f"Warning: Based on your income, we recommend a maximum loan of ${safe_loan}.", "warning")
-                
-            amount = self.view.get_number_input(f"Enter loan amount (max ${max_loan}): ", 0, max_loan)
+            safe_loan_to_take = self.game_state.get_safe_loan_amount()
+            prompt_detail = f" (max ${max_loan_player_can_take})"
+            if safe_loan_to_take > 0 and safe_loan_to_take <= max_loan_player_can_take:
+                prompt_detail += f", recommended: ${safe_loan_to_take}, or type 'max' for ${safe_loan_to_take}"
+            else: # If safe loan is 0 or exceeds max_loan_player_can_take, just show max limit
+                prompt_detail += f", or type 'max' for ${max_loan_player_can_take}"
+
+            # Use allow_max_str for get_number_input
+            amount_input = self.view.get_number_input(f"Enter loan amount{prompt_detail}: ", 0, max_loan_player_can_take, allow_max_str=True)
             
-            if amount > 0:
-                if self.game_state.take_loan(amount):
-                    self.view.show_message(f"Loan of ${amount} received!", "success")
+            amount_to_take = 0
+            if amount_input == "max":
+                # If safe_loan_to_take is positive and within overall limits, prefer it for 'max'
+                amount_to_take = safe_loan_to_take if safe_loan_to_take > 0 and safe_loan_to_take <= max_loan_player_can_take else max_loan_player_can_take
+            elif isinstance(amount_input, int):
+                amount_to_take = amount_input
+            
+            if amount_to_take > 0:
+                # Warning for exceeding safe loan, similar to GUI
+                if self.game_state.get_income_potential() > 0 and amount_to_take > safe_loan_to_take and amount_to_take <= max_loan_player_can_take:
+                     confirm_risk = self.view.get_input(
+                        f"{Fore.YELLOW}Warning: Loan amount ${amount_to_take} exceeds recommended safe loan ${safe_loan_to_take}. Proceed? (y/n):{Style.RESET_ALL} ", 
+                        ["y", "n"]
+                    )
+                     if confirm_risk == 'n':
+                         self.view.show_message("Loan cancelled.", "info")
+                         return
+
+                if self.game_state.take_loan(amount_to_take):
+                    self.view.show_message(f"Loan of ${amount_to_take} received!", "success")
                 else:
-                    self.view.show_message("Failed to process loan.", "error")
+                    self.view.show_message("Failed to process loan. Ensure amount is positive and within limits.", "error")
+            elif amount_input != "max":
+                self.view.show_message("No loan taken.", "info")
         
         elif choice == "2":  # Repay loan
             if self.game_state.loan <= 0:
                 self.view.show_message("You don't have any outstanding loans.", "warning")
                 return
                 
-            max_repay = min(self.game_state.loan, self.game_state.money)
-            if max_repay <= 0:
-                self.view.show_message("Not enough money to repay loan!", "error")
-                return
-                
-            amount = self.view.get_number_input(f"Enter repayment amount (max ${max_repay}): ", 0, max_repay)
+            max_repayable_with_money = self.game_state.money
+            actual_max_repay = min(self.game_state.loan, max_repayable_with_money)
             
-            if amount > 0:
-                if self.game_state.repay_loan(amount):
-                    self.view.show_message(f"Loan repayment of ${amount} processed!", "success")
+            if actual_max_repay <= 0:
+                self.view.show_message("Not enough money to make any repayment!", "error")
+                return
+            
+            # Smart default for CLI repayment: suggest full repayment if possible, else max affordable
+            suggested_repay_amount = min(self.game_state.loan, self.game_state.money)
+            prompt_detail = f" (max ${actual_max_repay})"
+            if suggested_repay_amount > 0:
+                prompt_detail += f", suggested: ${suggested_repay_amount}, or type 'max' for ${actual_max_repay}"
+            else:
+                 prompt_detail += f", or type 'max' for ${actual_max_repay}"
+
+            amount_input = self.view.get_number_input(f"Enter repayment amount{prompt_detail}: ", 0, actual_max_repay, allow_max_str=True)
+            
+            amount_to_repay = 0
+            if amount_input == "max":
+                amount_to_repay = actual_max_repay
+            elif isinstance(amount_input, int):
+                amount_to_repay = amount_input
+
+            if amount_to_repay > 0:
+                if self.game_state.repay_loan(amount_to_repay):
+                    self.view.show_message(f"Loan repayment of ${amount_to_repay} processed!", "success")
                 else:
-                    self.view.show_message("Failed to process repayment.", "error")
-    
-    def handle_rest(self) -> None:
+                    self.view.show_message("Failed to process repayment. Ensure amount is positive and within limits.", "error")
+            elif amount_input != "max":
+                 self.view.show_message("No repayment made.", "info")
+
+    def handle_rest(self) -> bool: # Returns True if a repeat action was taken for the next day cycle
         """Handle the rest action."""
         rep_gain = self.game_state.rest()
         self.view.show_message(f"You rested and improved your reputation by {rep_gain} points.", "success")
+        next_day_action_taken = False
+
+        # Check if can rest again (always possible unless game is over by other means)
+        if not self.game_state.is_game_over():
+            repeat_choice = self.view.get_input(f"Rest again for Day {self.game_state.day + 1}? (y/n): ", ["y", "n"])
+            if repeat_choice == 'y':
+                next_day_action_taken = True
+                self.view.show_message("Scheduled to rest next day...", "info")
+        return next_day_action_taken
 
     def handle_start_research(self) -> None:
         """Handle starting a new research project."""

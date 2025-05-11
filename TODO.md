@@ -111,9 +111,8 @@
   - [x] Implement `Enter` for primary dialog actions (where appropriate).
   - [x] Implement `Escape` to close/cancel dialogs.
 - [ ] **Smart Defaults in Dialog Input Fields**
-  - [ ] Pre-fill loan/repayment amounts with sensible defaults.
-- [ ] **Streamline Single-Action Day Events**
-  - [ ] Auto-advance non-interactive daily messages after a short pause (requires careful design).
+  - [x] Pre-fill loan/repayment amounts with sensible defaults (GUI).
+  - [x] Suggest sensible default loan/repayment amounts in prompts (CLI).
 
 ## Future Ideas
 - [ ] Add multiplayer/competitive mode

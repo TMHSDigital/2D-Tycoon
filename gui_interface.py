@@ -637,7 +637,7 @@ Game Tips:
     def handle_loans_dialog(self):
         dialog = tk.Toplevel(self.root)
         dialog.title("Manage Loans")
-        dialog.geometry("380x430") # Adjusted for close button
+        dialog.geometry("380x450") # Adjusted for potentially more text
         dialog.transient(self.root)
         dialog.grab_set()
         dialog.configure(bg="#f0f0f0")
@@ -661,46 +661,55 @@ Game Tips:
             daily_cost = int(self.game.loan * daily_interest_rate_val)
             ttk.Label(main_dialog_frame, text=f"Approx. daily interest cost: ${daily_cost}", style="Dialog.TLabel").pack(pady=5, anchor="w")
         
-        # Calculate income potential
-        income_potential = 0
-        if sum(self.game.inventory.values()) > 0:
-            base_income = 60  # Average of random 40-80
-            automation_bonus = 1.5 if self.game.upgrades["automation"] else 1.0
-            employee_bonus = 1 + (len(self.game.employees) * 0.4)  # Updated to 0.4 to match new bonus
-            income_potential = int(base_income * automation_bonus * employee_bonus)
+        income_potential = self.game.get_income_potential()
+        safe_max_loan_to_take = self.game.get_safe_loan_amount()
+        max_loan_player_can_take = config.MAX_LOAN_TOTAL - self.game.loan
         
-        # Calculate safe maximum loan
-        safe_max_loan = self.game.get_safe_loan_amount()
-        max_loan = 1000 - self.game.loan
-        
-        if income_potential > 0:
-            recommendation_text = f"Recommended max loan: ${safe_max_loan}"
-            if safe_max_loan < max_loan:
+        if income_potential > 0 and max_loan_player_can_take > 0:
+            recommendation_text = f"Recommended max additional loan: ${safe_max_loan_to_take}"
+            if safe_max_loan_to_take < max_loan_player_can_take:
                 recommendation_text += " (based on current income)"
             ttk.Label(main_dialog_frame, text=recommendation_text, foreground="#00529B", font=("Segoe UI", 10, "italic"), style="Dialog.TLabel").pack(pady=(10,5), anchor="w")
-        
+        elif max_loan_player_can_take <= 0:
+             ttk.Label(main_dialog_frame, text="Maximum loan limit reached.", foreground="orange", font=("Segoe UI", 10, "italic"), style="Dialog.TLabel").pack(pady=(10,5), anchor="w")
+
         amount_var = tk.StringVar()
         ttk.Label(main_dialog_frame, text="Amount:", style="Dialog.TLabel").pack(pady=(10,5), anchor="w")
         amount_entry = ttk.Entry(main_dialog_frame, textvariable=amount_var, style="Dialog.TEntry", width=27)
         amount_entry.pack(pady=5, fill="x")
-        
+
+        # Smart Default Logic
+        # Determine if primary action is likely taking or repaying to set smart default
+        if max_loan_player_can_take > 0 and (self.game.loan == 0 or safe_max_loan_to_take > 0):
+            # Default to suggesting taking a loan if possible and either no loan or safe amount > 0
+            if safe_max_loan_to_take > 0:
+                amount_var.set(str(safe_max_loan_to_take))
+        elif self.game.loan > 0:
+            # Default to repaying if there's a loan and cannot take more (or safe amount is 0)
+            amount_to_repay = min(self.game.loan, self.game.money)
+            if amount_to_repay > 0:
+                amount_var.set(str(amount_to_repay))
+        # else, leave blank or 0 if no clear action
+
         def take_loan():
             try:
                 amount = int(amount_var.get())
-                if income_potential > 0 and amount > safe_max_loan:
+                current_safe_max = self.game.get_safe_loan_amount() # Re-check at time of action
+                if income_potential > 0 and amount > current_safe_max and amount <= (config.MAX_LOAN_TOTAL - self.game.loan) :
                     if not messagebox.askyesno("Warning", 
-                                            f"This loan exceeds the recommended amount based on your income.\nAre you sure you want to proceed?"):
+                                            f"This loan (${amount}) exceeds the recommended safe amount of ${current_safe_max} based on your income.\nAre you sure you want to proceed?"):
                         return
                 if self.game.take_loan(amount):
                     messagebox.showinfo("Success", f"Loan of ${amount} received!")
                     self.update_status()
                     dialog.destroy()
                 else:
-                    # Check max loan cap for a more specific error
                     max_loan_possible = config.MAX_LOAN_TOTAL - self.game.loan
-                    if amount > max_loan_possible:
+                    if amount <= 0:
+                        messagebox.showerror("Error", "Loan amount must be positive.")
+                    elif amount > max_loan_possible:
                         messagebox.showerror("Error", f"Cannot take loan. Amount exceeds maximum possible additional loan of ${max_loan_possible}.")
-                    else: # General failure from take_loan, should be rare if amount is positive
+                    else: 
                         messagebox.showerror("Error", "Failed to process loan. Ensure amount is positive and within limits.")
             except ValueError:
                 messagebox.showerror("Error", "Please enter a valid amount")
@@ -713,30 +722,40 @@ Game Tips:
                     self.update_status()
                     dialog.destroy()
                 else:
-                    messagebox.showerror("Error", "Not enough money or amount exceeds loan!")
+                    if amount <=0:
+                        messagebox.showerror("Error", "Repayment amount must be positive.")
+                    elif amount > self.game.money:
+                        messagebox.showerror("Error", "Not enough money to make this repayment.")
+                    elif amount > self.game.loan:
+                        messagebox.showerror("Error", "Repayment exceeds outstanding loan amount.")
+                    else:
+                        messagebox.showerror("Error", "Not enough money or amount exceeds loan!")
             except ValueError:
                 messagebox.showerror("Error", "Please enter a valid amount")
         
         button_frame = ttk.Frame(main_dialog_frame, style="Dialog.TFrame")
-        button_frame.pack(pady=(15,5), fill="x") # Adjusted padding
+        button_frame.pack(pady=(15,5), fill="x")
 
         take_loan_button = ttk.Button(button_frame, text="Take Loan", command=take_loan, style="Dialog.TButton")
         take_loan_button.pack(side=tk.LEFT, expand=True, padx=5, pady=5)
         pay_loan_button = ttk.Button(button_frame, text="Pay Loan", command=pay_loan, style="Dialog.TButton")
         pay_loan_button.pack(side=tk.LEFT, expand=True, padx=5, pady=5)
         
+        # Disable take_loan_button if at max total loan
+        if max_loan_player_can_take <= 0:
+            take_loan_button.config(state=tk.DISABLED)
+        # Disable pay_loan_button if no loan or no money to pay
+        if self.game.loan <= 0 or self.game.money <= 0:
+            pay_loan_button.config(state=tk.DISABLED)
+
         close_button = ttk.Button(main_dialog_frame, text="Close", command=dialog.destroy, style="Dialog.TButton")
         close_button.pack(pady=(10,0), side=tk.BOTTOM)
 
-        # Key bindings
         dialog.bind("<Escape>", lambda e: close_button.invoke())
-        # Bind <Return> on amount_entry to trigger take_loan_button if an amount is entered
-        # otherwise, if dialog has focus, it could trigger take_loan_button too (might be too aggressive)
-        amount_entry.bind("<Return>", lambda e: take_loan_button.invoke() if amount_var.get() else None)
-        # For general <Return> on dialog, let's try take_loan_button as primary
-        dialog.bind("<Return>", lambda e: take_loan_button.invoke() if not amount_entry.focus_get() else None)
+        amount_entry.bind("<Return>", lambda e: take_loan_button.invoke() if amount_var.get() and take_loan_button['state'] == tk.NORMAL else (pay_loan_button.invoke() if amount_var.get() and pay_loan_button['state'] == tk.NORMAL else None))
+        dialog.bind("<Return>", lambda e: take_loan_button.invoke() if not amount_entry.focus_get() and take_loan_button['state'] == tk.NORMAL else None)
 
-        amount_entry.focus_set() # Set initial focus to amount entry
+        amount_entry.focus_set()
 
     def rest(self):
         self.game.rest()
