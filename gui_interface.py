@@ -50,13 +50,13 @@ class TycoonGUI:
         elif "alt" in available_themes:
             self.style.theme_use("alt")
         # Modern font and color palette
-        base_font = ("Segoe UI", 11)
-        header_font = ("Segoe UI", 14, "bold")
-        subheader_font = ("Segoe UI", 12, "bold")
-        light_font = ("Segoe UI", 10, "normal")
+        base_font = "Segoe UI 11"
+        header_font = "Segoe UI 14 bold"
+        subheader_font = "Segoe UI 12 bold"
+        light_font = "Segoe UI 10"
         # Fallbacks for non-Windows
         try:
-            self.root.option_add("*Font", "Segoe UI 11")
+            self.root.option_add("*Font", base_font)
         except:
             self.root.option_add("*Font", "Arial 11")
         # Backgrounds
