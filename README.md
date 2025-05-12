@@ -43,7 +43,7 @@ A text-based business simulation game where you manage resources, build reputati
    python main.py
    ```
 
-   For Graphical User Interface:
+   For Graphical User Interface (recommended for the best experience):
    ```
    python main.py --gui
    ```
