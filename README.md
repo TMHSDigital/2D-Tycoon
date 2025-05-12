@@ -19,11 +19,24 @@ A text-based business simulation game where you manage resources, build reputati
 
 ## How to Play
 1. Make sure you have Python 3.7 or higher installed
-2. Install dependencies:
+2. Create and activate a virtual environment:
+
+   For Windows:
+   ```
+   python -m venv venv
+   .\venv\Scripts\activate
+   ```
+
+   For macOS/Linux:
+   ```
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+3. Install dependencies:
    ```
    pip install -r requirements.txt
    ```
-3. Run the game:
+4. Run the game:
 
    For Command Line Interface:
    ```
