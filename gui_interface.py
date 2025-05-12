@@ -644,7 +644,7 @@ Game Tips:
 
     def handle_upgrades_dialog(self):
         dialog = tk.Toplevel(self.root)
-        dialog.title("Business Upgrades") # Updated title
+        dialog.title("Business Upgrades")
         dialog.geometry("500x400") 
         dialog.transient(self.root)
         dialog.grab_set()
@@ -652,16 +652,43 @@ Game Tips:
 
         style = ttk.Style(dialog)
         if "clam" in style.theme_names(): style.theme_use("clam")
-        style.configure("Dialog.TLabel", background="#f0f0f0", font=("Segoe UI", 10))
-        style.configure("Dialog.TLabelframe", background="#f0f0f0", font=("Segoe UI", 11, "bold"))
-        style.configure("Dialog.TLabelframe.Label", background="#f0f0f0", foreground="#00529B", font=("Segoe UI", 11, "bold"))
-        style.configure("Dialog.TButton", font=("Segoe UI", 10, "bold"), padding=5)
-        
-        main_dialog_frame = ttk.Frame(dialog, padding=15, style="Dialog.TFrame")
-        main_dialog_frame.pack(fill="both", expand=True)
+        style.configure("Dialog.TLabel", background="#f0f0f0", font=self.default_font_widget)
+        style.configure("Dialog.TLabelframe", background="#f0f0f0", font=self.default_font_widget) # Use appropriate font style
+        style.configure("Dialog.TLabelframe.Label", background="#f0f0f0", foreground="#00529B", font=self.default_font_widget) # Use appropriate font style
+        style.configure("Dialog.TButton", font=self.default_font_widget, padding=5)
+        style.configure("Dialog.TFrame", background="#f0f0f0")
 
+        # Create a main canvas for the entire dialog content
+        dialog_canvas = tk.Canvas(dialog, bg="#f0f0f0", highlightthickness=0)
+        dialog_canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        dialog_scrollbar = ttk.Scrollbar(dialog, orient="vertical", command=dialog_canvas.yview)
+        dialog_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        dialog_canvas.configure(yscrollcommand=dialog_scrollbar.set)
+
+        # This frame will hold all dialog content and be placed on the canvas
+        scrollable_content_frame = ttk.Frame(dialog_canvas, padding=15, style="Dialog.TFrame")
+        dialog_canvas.create_window((0,0), window=scrollable_content_frame, anchor="nw")
+
+        def _on_dialog_frame_configure(event):
+            dialog_canvas.configure(scrollregion=dialog_canvas.bbox("all"))
+        scrollable_content_frame.bind("<Configure>", _on_dialog_frame_configure)
+        
+        # Mousewheel scrolling for the dialog canvas
+        def _on_dialog_mousewheel(event):
+            if event.num == 4: dialog_canvas.yview_scroll(-1, "units")
+            elif event.num == 5: dialog_canvas.yview_scroll(1, "units")
+            else: dialog_canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        
+        # Bind to the canvas and its children, or use bind_all on the dialog itself
+        dialog.bind_all("<MouseWheel>", _on_dialog_mousewheel)
+        dialog.bind_all("<Button-4>", _on_dialog_mousewheel)
+        dialog.bind_all("<Button-5>", _on_dialog_mousewheel)
+
+        # All original dialog content now goes into scrollable_content_frame
         for upgrade_key, spec in config.UPGRADE_SPECS.items():
-            frame = ttk.LabelFrame(main_dialog_frame, text=spec["name"], padding=10, style="Dialog.TLabelframe")
+            frame = ttk.LabelFrame(scrollable_content_frame, text=spec["name"], padding=10, style="Dialog.TLabelframe")
             frame.pack(pady=10, fill="x", padx=10)
             
             current_level_or_status = self.game.upgrades.get(upgrade_key, False if spec["max_level"] == 1 else 0)
@@ -714,12 +741,12 @@ Game Tips:
                       command=make_upgrade_handler(upgrade_key), style="Dialog.TButton")
             purchase_button.pack(pady=5, anchor="e")
         
-        close_button = ttk.Button(main_dialog_frame, text="Close", command=dialog.destroy, style="Dialog.TButton")
+        close_button = ttk.Button(scrollable_content_frame, text="Close", command=dialog.destroy, style="Dialog.TButton")
         close_button.pack(pady=(10,0))
 
         # Key bindings
         dialog.bind("<Escape>", lambda e: close_button.invoke())
-        # <Return> is not bound to a specific purchase, user must click or tab and press space/enter on a focused button.
+        # <Return> is not bound globally due to multiple start buttons.
         dialog.focus_set()
 
     def handle_loans_dialog(self):
